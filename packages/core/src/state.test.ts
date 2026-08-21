@@ -69,4 +69,36 @@ describe("loadDownloads", () => {
       await rm(dir, { recursive: true })
     }
   })
+
+  test("round-trips deselected file indexes", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "corvus-state-"))
+    const file = path.join(dir, "downloads.json")
+    try {
+      const store = new DownloadsFile(file)
+      store.set([{ ...makeDownload("magnet:?xt=urn:btih:" + "ef".repeat(20)), deselected: [1, 3] }])
+      await store.close()
+      const loaded = await loadDownloads(file)
+      expect(loaded[0]!.deselected).toEqual([1, 3])
+    } finally {
+      await rm(dir, { recursive: true })
+    }
+  })
+
+  test("skips entries with a malformed deselected list", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "corvus-state-"))
+    const file = path.join(dir, "downloads.json")
+    try {
+      await writeFile(
+        file,
+        JSON.stringify([
+          { magnet: "magnet:?xt=urn:btih:" + "12".repeat(20), name: "bad", addedAt: 1, done: false, deselected: ["0"] },
+          { magnet: "magnet:?xt=urn:btih:" + "34".repeat(20), name: "good", addedAt: 1, done: false, deselected: [2] },
+        ]),
+      )
+      const loaded = await loadDownloads(file)
+      expect(loaded.map((entry) => entry.name)).toEqual(["good"])
+    } finally {
+      await rm(dir, { recursive: true })
+    }
+  })
 })

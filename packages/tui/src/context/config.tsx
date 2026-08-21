@@ -25,6 +25,9 @@ export function ConfigProvider(props: {
     if ("seedAfterComplete" in patch && typeof props.engine.setSeedAfterComplete === "function") {
       props.engine.setSeedAfterComplete(next.seedAfterComplete)
     }
+    if (("downloadLimit" in patch || "uploadLimit" in patch) && typeof props.engine.setLimits === "function") {
+      props.engine.setLimits(next.downloadLimit, next.uploadLimit)
+    }
     props.persist?.(patch)
   }
 

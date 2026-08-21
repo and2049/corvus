@@ -31,6 +31,8 @@ export interface CorvusConfig {
   readonly proxy?: string
   readonly torrentPort?: number
   readonly maxConns?: number
+  readonly downloadLimit?: number
+  readonly uploadLimit?: number
   readonly cloudflare?: CloudflareConfig
   readonly providers: ProvidersConfig
 }

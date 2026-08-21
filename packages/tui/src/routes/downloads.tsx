@@ -10,6 +10,7 @@ import { theme } from "../theme"
 const LIST_HINTS: readonly Hint[] = [
   { key: "enter", label: "files" },
   { key: "p", label: "pause/resume" },
+  { key: "t", label: "retry" },
   { key: "r", label: "remove" },
   { key: "esc", label: "back" },
 ]
@@ -73,6 +74,7 @@ export function Downloads(props: { onBack: () => void }) {
   let scroll: ScrollBoxRenderable | undefined
 
   const snapshots = createMemo(() => downloads.snapshots())
+  const clientError = createMemo(() => downloads.clientError())
   const openSnapshot = createMemo(() => snapshots().find((s) => s.key === openKey()))
 
   createEffect(() => {
@@ -126,6 +128,11 @@ export function Downloads(props: { onBack: () => void }) {
         setFileCursor(0)
         setOpenKey(selected.key)
       }
+      return
+    }
+    if (key.name === "t" && !key.ctrl) {
+      const selected = snapshots()[cursor()]
+      if (selected !== undefined) void downloads.retry(selected.key)
       return
     }
     if (key.name === "r" && !key.ctrl) {
@@ -186,7 +193,9 @@ export function Downloads(props: { onBack: () => void }) {
                       <text flexShrink={0} fg={stateColor(snapshot)}>
                         {snapshot.state === "error" && snapshot.error !== undefined
                           ? `error: ${truncate(snapshot.error, 60)}`
-                          : snapshot.state}
+                          : snapshot.state === "fetching"
+                            ? `fetching ${formatEta(snapshot.fetchingSeconds)}`
+                            : snapshot.state}
                       </text>
                     </Show>
                   </box>
@@ -196,6 +205,9 @@ export function Downloads(props: { onBack: () => void }) {
           </scrollbox>
           <Show when={snapshots().length === 0}>
             <text fg={theme.dim}>no downloads</text>
+          </Show>
+          <Show when={clientError()}>
+            {(message) => <text fg={theme.error} truncate wrapMode="none">{`client: ${message()}`}</text>}
           </Show>
         </box>
       </box>

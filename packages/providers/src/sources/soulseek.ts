@@ -27,7 +27,13 @@ export class Soulseek implements Provider {
         if (this.client.connectionState !== "logged-in") {
           const response = await this.client.connect({ ...this.credentials })
           if (!response.success) {
-            throw new Error(`login rejected: ${response.rejectionReason ?? "unknown reason"}`)
+            // INVALIDPASS means the username exists with a different password; a
+            // first-time login with an unused username registers the account.
+            const hint =
+              response.rejectionReason === "INVALIDPASS"
+                ? "username taken or wrong password (an unused username would have been registered)"
+                : (response.rejectionReason ?? "unknown reason")
+            throw new Error(`login rejected: ${hint}`)
           }
         }
         return await this.client.search(q)

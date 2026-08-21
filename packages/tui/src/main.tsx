@@ -24,12 +24,14 @@ const engine = new Engine({
   seedAfterComplete: config.seedAfterComplete,
   torrentPort: config.torrentPort,
   maxConns: config.maxConns,
+  downloadLimit: config.downloadLimit,
+  uploadLimit: config.uploadLimit,
 })
 
 const downloadsFile = new DownloadsFile(`${configDir()}/downloads.json`)
 const persisted = await loadDownloads(`${configDir()}/downloads.json`)
 for (const download of persisted) {
-  if (!download.done) engine.add(download.magnet)
+  if (!download.done) engine.add(download.magnet, { deselected: download.deselected })
 }
 
 let shuttingDown = false

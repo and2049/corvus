@@ -1,5 +1,6 @@
 import { createMemo, createSignal, Match, Switch } from "solid-js"
-import { useKeyboard } from "@opentui/solid"
+import { useKeyboard, useRenderer } from "@opentui/solid"
+import { writeToClipboard } from "./clipboard"
 import type { ConfigPatch, CorvusConfig, Engine, PersistedDownload } from "@corvus/core"
 import { ContentFilter, createProviders } from "@corvus/providers"
 import { Shell } from "./component/shell"
@@ -54,6 +55,7 @@ function AppInner(props: {
 
 export function Router(props: { onExit?: () => void }) {
   const search = useSearch()
+  const renderer = useRenderer()
   const [route, setRoute] = createSignal<Route>("home")
   const [returnTo, setReturnTo] = createSignal<Route>("home")
 
@@ -63,6 +65,11 @@ export function Router(props: { onExit?: () => void }) {
   }
 
   useKeyboard((key) => {
+    // must be checked before plain ctrl+c - shift+c also matches ctrl+c here
+    if (key.ctrl && key.shift && key.name === "c") {
+      void writeToClipboard(renderer.getSelection()?.getSelectedText() ?? "", { renderer })
+      return
+    }
     if (key.ctrl && key.name === "c") {
       props.onExit?.()
       return
@@ -94,7 +101,6 @@ export function Router(props: { onExit?: () => void }) {
                 search.run(query)
                 setRoute("results")
               }}
-              onExit={props.onExit}
             />
           </Match>
           <Match when={route() === "results"}>

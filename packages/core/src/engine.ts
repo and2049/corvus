@@ -19,6 +19,7 @@ export interface DownloadSnapshot {
   readonly uploadSpeed: number
   readonly peers: number
   readonly etaSeconds: number | undefined
+  readonly fetchingSeconds: number | undefined
   readonly error?: string
   readonly files: readonly FileSnapshot[]
 }
@@ -59,6 +60,7 @@ export function snapshotFrom(key: string, torrent: TorrentLike): DownloadSnapsho
     uploadSpeed: torrent.uploadSpeed,
     peers: torrent.numPeers,
     etaSeconds: eta,
+    fetchingSeconds: undefined,
     files: [],
   }
 }
@@ -66,8 +68,9 @@ export function snapshotFrom(key: string, torrent: TorrentLike): DownloadSnapsho
 interface Entry {
   magnet: string
   snapshot: DownloadSnapshot
+  addedAt: number
   torrent?: Torrent
-  selection: boolean[] | undefined
+  deselected: ReadonlySet<number>
 }
 
 export interface EngineOptions {
@@ -75,6 +78,8 @@ export interface EngineOptions {
   readonly seedAfterComplete?: boolean
   readonly torrentPort?: number
   readonly maxConns?: number
+  readonly downloadLimit?: number
+  readonly uploadLimit?: number
 }
 
 export class Engine {
@@ -88,6 +93,8 @@ export class Engine {
     client: TorrentClient = createWebTorrentClient({
       torrentPort: options.torrentPort,
       maxConns: options.maxConns,
+      downloadLimit: options.downloadLimit,
+      uploadLimit: options.uploadLimit,
     }),
   ) {
     this.client = client
@@ -105,24 +112,41 @@ export class Engine {
     this.seedAfterComplete = value
   }
 
-  add(magnet: string): string {
+  // Rates in bytes/second; undefined disables the limit. Applies to the whole
+  // client (every peer of every torrent, including ones added later).
+  setLimits(download: number | undefined, upload: number | undefined): void {
+    this.client.throttleDownload(download ?? -1)
+    this.client.throttleUpload(upload ?? -1)
+  }
+
+  add(magnet: string, opts?: { deselected?: readonly number[] }): string {
     const key = infoHashFromMagnet(magnet) ?? magnet
     if (this.entries.has(key)) return key
-    const entry: Entry = { magnet, snapshot: emptySnapshot(key), selection: undefined }
+    const entry: Entry = {
+      magnet,
+      snapshot: emptySnapshot(key),
+      addedAt: Date.now(),
+      deselected: new Set(opts?.deselected ?? []),
+    }
     this.entries.set(key, entry)
+    this.attach(key, entry)
+    return key
+  }
+
+  private attach(key: string, entry: Entry): void {
     let torrent: Torrent
     try {
-      torrent = this.client.add(magnet, { path: this.options.downloadDir })
+      torrent = this.client.add(entry.magnet, { path: this.options.downloadDir })
     } catch (error) {
       entry.snapshot = errorSnapshot(key, String(error))
-      return key
+      return
     }
     entry.torrent = torrent
     torrent.on("download", () => this.refresh(key, torrent))
     torrent.on("info", () => {
       const current = this.entries.get(key)
       if (current === undefined) return
-      if (current.selection === undefined) current.selection = torrent.files.map(() => true)
+      for (const index of current.deselected) torrent.files[index]?.deselect()
       this.refresh(key, torrent)
     })
     torrent.on("done", () => {
@@ -142,10 +166,24 @@ export class Engine {
       // A duplicate-add error is fired on the ORIGINAL (healthy) torrent; ignore it
       // so a redundant add never destroys a working download.
       if (String(err).toLowerCase().includes("duplicate")) return
-      current.torrent = undefined
       current.snapshot = errorSnapshot(key, String(err))
+      current.torrent = undefined
+      torrent.destroy()
     })
-    return key
+  }
+
+  async retry(key: string): Promise<void> {
+    const entry = this.entries.get(key)
+    if (entry === undefined) return
+    if (entry.snapshot.state !== "error" && entry.snapshot.state !== "fetching") return
+    const torrent = entry.torrent
+    if (torrent !== undefined) {
+      await new Promise<void>((resolve) => torrent.destroy({}, () => resolve()))
+      entry.torrent = undefined
+    }
+    entry.snapshot = emptySnapshot(key)
+    entry.addedAt = Date.now()
+    this.attach(key, entry)
   }
 
   pause(key: string): void {
@@ -164,16 +202,18 @@ export class Engine {
 
   toggleFile(key: string, index: number): void {
     const entry = this.entries.get(key)
-    if (entry?.torrent === undefined || entry.selection === undefined) return
+    if (entry?.torrent === undefined) return
     const file = entry.torrent.files[index]
     if (file === undefined) return
-    if (entry.selection[index]!) {
-      entry.selection[index] = false
-      file.deselect()
-    } else {
-      entry.selection[index] = true
+    const deselected = new Set(entry.deselected)
+    if (deselected.has(index)) {
+      deselected.delete(index)
       file.select()
+    } else {
+      deselected.add(index)
+      file.deselect()
     }
+    entry.deselected = deselected
     this.refresh(key, entry.torrent)
   }
 
@@ -191,7 +231,7 @@ export class Engine {
     for (const [key, entry] of this.entries) {
       if (entry.torrent !== undefined) this.refresh(key, entry.torrent)
     }
-    return [...this.entries.values()].map((entry) => entry.snapshot)
+    return [...this.entries.values()].map((entry) => withFetching(entry.snapshot, entry.addedAt))
   }
 
   keys(): string[] {
@@ -213,19 +253,28 @@ export class Engine {
     const entry = this.entries.get(key)
     if (entry === undefined) return
     const base = snapshotFrom(key, torrent)
-    entry.snapshot =
-      entry.selection === undefined
-        ? base
-        : {
-            ...base,
-            files: torrent.files.map((file, index) => ({
-              name: file.name,
-              path: file.path,
-              length: file.length,
-              selected: entry.selection![index] ?? true,
-            })),
-          }
+    entry.snapshot = {
+      ...base,
+      fetchingSeconds: elapsedFetching(base.state, entry.addedAt),
+      files: torrent.files.map((file, index) => ({
+        name: file.name,
+        path: file.path,
+        length: file.length,
+        selected: !entry.deselected.has(index),
+      })),
+    }
   }
+}
+
+function elapsedFetching(state: DownloadSnapshot["state"], addedAt: number): number | undefined {
+  return state === "fetching"
+    ? Math.max(0, Math.round((Date.now() - addedAt) / 1000))
+    : undefined
+}
+
+function withFetching(snapshot: DownloadSnapshot, addedAt: number): DownloadSnapshot {
+  if (snapshot.state !== "fetching") return snapshot
+  return { ...snapshot, fetchingSeconds: elapsedFetching(snapshot.state, addedAt) }
 }
 
 function emptySnapshot(key: string): DownloadSnapshot {
@@ -240,6 +289,7 @@ function emptySnapshot(key: string): DownloadSnapshot {
     uploadSpeed: 0,
     peers: 0,
     etaSeconds: undefined,
+    fetchingSeconds: undefined,
     files: [],
   }
 }

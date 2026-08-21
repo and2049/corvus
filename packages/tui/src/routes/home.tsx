@@ -1,5 +1,4 @@
 import { type InputRenderable, TextAttributes } from "@opentui/core"
-import { useKeyboard } from "@opentui/solid"
 import { onMount } from "solid-js"
 import { HRule } from "../component/hrule"
 import { Logo } from "../component/logo"
@@ -10,22 +9,18 @@ const HOME_HINTS: readonly Hint[] = [
   { key: "enter", label: "search" },
   { key: "ctrl+g", label: "settings" },
   { key: "ctrl+f", label: "sources" },
-  { key: "esc", label: "quit" },
+  { key: "ctrl+shift+c", label: "copy" },
 ]
 
 export function Home(props: {
   onSubmit: (query: string) => void
   inputRef?: (el: InputRenderable) => void
-  onExit?: () => void
 }) {
   const shell = useShell()
   let input: InputRenderable | undefined
   onMount(() => {
     shell.setHints(HOME_HINTS)
     input?.focus()
-  })
-  useKeyboard((key) => {
-    if (key.name === "escape") props.onExit?.()
   })
   return (
     <box flexDirection="column" flexGrow={1} minHeight={0}>

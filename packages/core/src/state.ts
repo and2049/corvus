@@ -6,6 +6,7 @@ export interface PersistedDownload {
   readonly name: string
   readonly addedAt: number
   readonly done: boolean
+  readonly deselected?: readonly number[]
 }
 
 export async function loadDownloads(filePath: string): Promise<PersistedDownload[]> {
@@ -30,13 +31,18 @@ export async function loadDownloads(filePath: string): Promise<PersistedDownload
 function isPersistedDownload(value: unknown): value is PersistedDownload {
   if (typeof value !== "object" || value === null) return false
   const record = value as Record<string, unknown>
-  return (
-    typeof record["magnet"] === "string" &&
-    record["magnet"] !== "" &&
-    typeof record["name"] === "string" &&
-    typeof record["addedAt"] === "number" &&
-    typeof record["done"] === "boolean"
-  )
+  if (
+    typeof record["magnet"] !== "string" ||
+    record["magnet"] === "" ||
+    typeof record["name"] !== "string" ||
+    typeof record["addedAt"] !== "number" ||
+    typeof record["done"] !== "boolean"
+  ) {
+    return false
+  }
+  const deselected = record["deselected"]
+  if (deselected === undefined) return true
+  return Array.isArray(deselected) && deselected.every((index) => typeof index === "number" && Number.isInteger(index) && index >= 0)
 }
 
 export class DownloadsFile {

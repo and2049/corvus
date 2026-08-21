@@ -1,6 +1,7 @@
 import { type InputRenderable, type ScrollBoxRenderable } from "@opentui/core"
 import { useKeyboard } from "@opentui/solid"
 import { createEffect, createMemo, createSignal, For, Show } from "solid-js"
+import { humanSizeBinary, parseHumanSize } from "@corvus/providers"
 import { useConfig } from "../context/config"
 import { useShell, type Hint } from "../context/shell"
 import { theme } from "../theme"
@@ -15,7 +16,7 @@ const EDIT_HINTS: readonly Hint[] = [
   { key: "esc", label: "cancel" },
 ]
 
-type RowKind = "toggle" | "text" | "int" | "nav"
+type RowKind = "toggle" | "text" | "int" | "size" | "nav"
 
 interface Row {
   readonly key: string
@@ -29,6 +30,8 @@ const ROWS: readonly Row[] = [
   { key: "seedAfterComplete", label: "seed after complete", kind: "toggle", note: "applies now" },
   { key: "torrentPort", label: "torrent port", kind: "int", note: "restart to apply · set to your VPN-forwarded port" },
   { key: "maxConns", label: "max connections", kind: "int", note: "restart to apply" },
+  { key: "downloadLimit", label: "download limit", kind: "size", note: "applies now · e.g. 524288 or 512KB · empty = unlimited" },
+  { key: "uploadLimit", label: "upload limit", kind: "size", note: "applies now · e.g. 1048576 or 1MB · empty = unlimited" },
   { key: "proxy", label: "search proxy", kind: "text", note: "applies now · search traffic only, not BT peers" },
   { key: "hideNSFW", label: "hide nsfw", kind: "toggle", note: "applies now" },
   { key: "searchTimeoutMs", label: "search timeout (ms)", kind: "int", note: "applies now" },
@@ -68,6 +71,11 @@ export function Settings(props: { onBack: () => void; onOpenSources: () => void 
         return c.torrentPort !== undefined ? String(c.torrentPort) : "(ephemeral)"
       case "maxConns":
         return c.maxConns !== undefined ? String(c.maxConns) : "(default)"
+      case "downloadLimit":
+      case "uploadLimit": {
+        const limit = c[row.key as "downloadLimit" | "uploadLimit"]
+        return limit !== undefined && limit >= 0 ? humanSizeBinary(limit) + "/s" : "(unlimited)"
+      }
       case "proxy":
         return c.proxy !== undefined && c.proxy !== "" ? c.proxy : "(none)"
       case "hideNSFW":
@@ -82,6 +90,8 @@ export function Settings(props: { onBack: () => void; onOpenSources: () => void 
   }
 
   const editInitial = (row: Row): string => {
+    // Size rows always start empty: typing replaces the limit, an empty submit clears it.
+    if (row.kind === "size") return ""
     const value = displayValue(row)
     return value.startsWith("(") ? "" : value
   }
@@ -106,6 +116,11 @@ export function Settings(props: { onBack: () => void; onOpenSources: () => void 
       const n = Number.parseInt(trimmed, 10)
       const valid = trimmed !== "" && Number.isFinite(n) && n >= 0
       update({ [row.key]: valid ? n : undefined })
+    } else if (row.kind === "size") {
+      // -1 means unlimited (webtorrent's disabled-throttle sentinel); an empty
+      // input clears the limit.
+      const bytes = trimmed === "" ? -1 : parseHumanSize(trimmed)
+      update({ [row.key]: bytes > 0 ? bytes : -1 })
     } else {
       update({ [row.key]: trimmed })
     }

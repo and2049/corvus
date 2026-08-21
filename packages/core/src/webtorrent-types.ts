@@ -39,4 +39,6 @@ export interface TorrentClient {
   remove(torrentId: string | Torrent, opts?: { destroyStore?: boolean }, cb?: () => void): void
   on(event: string, cb: (...args: never[]) => void): void
   destroy(cb?: (err?: Error) => void): Promise<void> | void
+  throttleDownload(rate: number): number
+  throttleUpload(rate: number): number
 }

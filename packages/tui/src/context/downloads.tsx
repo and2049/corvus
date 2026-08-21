@@ -9,6 +9,8 @@ export interface DownloadsStore {
   readonly remove: (key: string) => Promise<void>
   readonly togglePause: (key: string) => void
   readonly toggleFile: (key: string, index: number) => void
+  readonly retry: (key: string) => Promise<void>
+  readonly clientError: () => string | undefined
 }
 
 const DownloadsContext = createContext<DownloadsStore>()
@@ -53,9 +55,17 @@ export function DownloadsProvider(props: {
           name: snapshot?.name ?? key,
           addedAt: addedAt.get(magnet) ?? Date.now(),
           done: snapshot?.state === "done",
+          ...(snapshot !== undefined && snapshot.files.length > 0
+            ? { deselected: deselectedIndexes(snapshot) }
+            : {}),
         } satisfies PersistedDownload
       }),
     )
+  }
+
+  const deselectedIndexes = (snapshot: DownloadSnapshot): number[] | undefined => {
+    const indexes = snapshot.files.flatMap((file, index) => (file.selected ? [] : [index]))
+    return indexes.length === 0 ? undefined : indexes
   }
 
   const add = async (result: TorrentResult, providers: readonly Provider[]): Promise<boolean> => {
@@ -95,9 +105,16 @@ export function DownloadsProvider(props: {
   const toggleFile = (key: string, index: number) => {
     props.engine.toggleFile(key, index)
     tick()
+    persistNow()
   }
 
-  const store: DownloadsStore = { snapshots, add, remove, togglePause, toggleFile }
+  const retry = async (key: string) => {
+    await props.engine.retry(key)
+    tick()
+    persistNow()
+  }
+
+  const store: DownloadsStore = { snapshots, add, remove, togglePause, toggleFile, retry, clientError: () => props.engine.clientError() }
   return <DownloadsContext.Provider value={store}>{props.children}</DownloadsContext.Provider>
 }
 
