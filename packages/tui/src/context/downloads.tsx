@@ -1,12 +1,20 @@
 import { createContext, createSignal, onCleanup, useContext, type JSX } from "solid-js"
 import { Effect } from "effect"
 import type { DownloadSnapshot, Engine, PersistedDownload } from "@corvus/core"
-import { infoHashFromMagnet, type Provider, type TorrentResult } from "@corvus/providers"
+import {
+  buildMagnet,
+  DEFAULT_TRACKERS,
+  infoHashFromMagnet,
+  parseMagnet,
+  unionMagnet,
+  type Provider,
+  type TorrentResult,
+} from "@corvus/providers"
 
 export interface DownloadsStore {
   readonly snapshots: () => readonly DownloadSnapshot[]
   readonly add: (result: TorrentResult, providers: readonly Provider[]) => Promise<boolean>
-  readonly addMagnet: (magnet: string) => boolean
+  readonly addMagnet: (magnet: string) => "added" | "duplicate" | "invalid"
   readonly remove: (key: string) => Promise<void>
   readonly togglePause: (key: string) => void
   readonly toggleFile: (key: string, index: number) => void
@@ -87,14 +95,18 @@ export function DownloadsProvider(props: {
     return true
   }
 
-  const addMagnet = (raw: string): boolean => {
+  const addMagnet = (raw: string): "added" | "duplicate" | "invalid" => {
     const magnet = raw.trim()
-    if (infoHashFromMagnet(magnet) === undefined) return false
-    if (!addedAt.has(magnet)) addedAt.set(magnet, Date.now())
-    props.engine.add(magnet)
+    const parsed = parseMagnet(magnet)
+    if (parsed === undefined) return "invalid"
+    if (props.engine.keys().includes(parsed.infoHash)) return "duplicate"
+    // Bare pastes often carry no trackers; merge in the defaults so they don't sit on DHT alone.
+    const withTrackers = unionMagnet(magnet, buildMagnet(parsed.infoHash, "", DEFAULT_TRACKERS))
+    if (!addedAt.has(withTrackers)) addedAt.set(withTrackers, Date.now())
+    props.engine.add(withTrackers)
     tick()
     persistNow()
-    return true
+    return "added"
   }
 
   const remove = async (key: string) => {

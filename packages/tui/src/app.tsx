@@ -67,8 +67,23 @@ export function Router(props: { onExit?: () => void }) {
     setRoute(target)
   }
 
+  const copySelection = () => {
+    const text = renderer.getSelection()?.getSelectedText() ?? ""
+    if (text === "") return
+    renderer.clearSelection()
+    void writeToClipboard(text, { renderer }).then(
+      (ok) => shell.showNotice(ok ? "Copied to clipboard" : "Copy failed"),
+      () => shell.showNotice("Copy failed"),
+    )
+  }
+
   useKeyboard((key) => {
-    if (key.ctrl && key.name === "c") {
+    // must be checked before plain ctrl+c - shift+c also matches ctrl+c here
+    if (key.ctrl && key.shift && key.name === "c") {
+      copySelection()
+      return
+    }
+    if (key.ctrl && !key.shift && key.name === "c") {
       props.onExit?.()
       return
     }
@@ -82,15 +97,6 @@ export function Router(props: { onExit?: () => void }) {
     }
     if (key.name === "d" && !key.ctrl && route() === "results") setRoute("downloads")
   })
-
-  const copySelection = () => {
-    const text = renderer.getSelection()?.getSelectedText() ?? ""
-    if (text === "") return
-    renderer.clearSelection()
-    void writeToClipboard(text, { renderer }).then((ok) => {
-      shell.showNotice(ok ? "Copied to clipboard" : "Copy failed")
-    })
-  }
 
   const backFrom = (current: Route): Route => {
     if (current === "settings" || current === "sources") return returnTo()

@@ -1,4 +1,4 @@
-import { createContext, createSignal, useContext, type Accessor, type JSX } from "solid-js"
+import { createContext, createSignal, onCleanup, useContext, type Accessor, type JSX } from "solid-js"
 
 export type Route = "home" | "results" | "downloads" | "settings" | "sources"
 
@@ -34,6 +34,9 @@ export function ShellProvider(props: { children: JSX.Element }) {
   const [overlay, setOverlay] = createSignal<(() => JSX.Element) | undefined>(undefined)
   const [notice, setNotice] = createSignal<string | undefined>(undefined)
   let noticeTimer: ReturnType<typeof setTimeout> | undefined
+  onCleanup(() => {
+    if (noticeTimer !== undefined) clearTimeout(noticeTimer)
+  })
   const store: ShellStore = {
     hints,
     setHints: (next) => setHints(next),

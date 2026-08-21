@@ -1,4 +1,5 @@
 import { createMemo, For, Show } from "solid-js"
+import type { CorvusConfig } from "@corvus/core"
 import { formatBytes } from "@corvus/providers"
 import { useConfigOptional } from "../context/config"
 import { useDownloadsOptional } from "../context/downloads"
@@ -8,19 +9,18 @@ import { theme } from "../theme"
 
 export const APP_VERSION = "0.1.0"
 
+export function providerCounts(c: CorvusConfig | undefined): string {
+  if (c === undefined) return ""
+  const names = Object.keys(c.providers)
+  const enabled = names.filter((name) => c.providers[name]?.enabled !== false).length
+  return `${enabled}/${names.length}`
+}
+
 export function Footer(props: { route: Route }) {
   const shell = useShell()
   const config = useConfigOptional()
   const search = useSearchOptional()
   const downloads = useDownloadsOptional()
-
-  const providerCounts = (): string => {
-    const c = config?.config()
-    if (c === undefined) return ""
-    const names = Object.keys(c.providers)
-    const enabled = names.filter((name) => c.providers[name]?.enabled !== false).length
-    return `${enabled}/${names.length}`
-  }
 
   const context = createMemo(() => {
     switch (props.route) {
@@ -37,7 +37,7 @@ export function Footer(props: { route: Route }) {
       case "settings":
         return "settings"
       case "sources":
-        return `sources · ${providerCounts()} enabled`
+        return `sources · ${providerCounts(config?.config())} enabled`
     }
   })
 
