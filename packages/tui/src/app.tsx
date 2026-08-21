@@ -7,7 +7,7 @@ import { Shell } from "./component/shell"
 import { ConfigProvider, useConfig } from "./context/config"
 import { DownloadsProvider } from "./context/downloads"
 import { SearchProvider, useSearch } from "./context/search"
-import { ShellProvider, type Route } from "./context/shell"
+import { ShellProvider, useShell, type Route } from "./context/shell"
 import { Home } from "./routes/home"
 import { Results } from "./routes/results"
 import { Downloads } from "./routes/downloads"
@@ -47,7 +47,9 @@ function AppInner(props: {
   return (
     <SearchProvider providers={providers()} filter={filter()} timeoutMs={config().searchTimeoutMs}>
       <DownloadsProvider engine={props.engine} persisted={props.persisted} persist={props.persist}>
-        <Router onExit={props.onExit} />
+        <ShellProvider>
+          <Router onExit={props.onExit} />
+        </ShellProvider>
       </DownloadsProvider>
     </SearchProvider>
   )
@@ -55,6 +57,7 @@ function AppInner(props: {
 
 export function Router(props: { onExit?: () => void }) {
   const search = useSearch()
+  const shell = useShell()
   const renderer = useRenderer()
   const [route, setRoute] = createSignal<Route>("home")
   const [returnTo, setReturnTo] = createSignal<Route>("home")
@@ -65,11 +68,6 @@ export function Router(props: { onExit?: () => void }) {
   }
 
   useKeyboard((key) => {
-    // must be checked before plain ctrl+c - shift+c also matches ctrl+c here
-    if (key.ctrl && key.shift && key.name === "c") {
-      void writeToClipboard(renderer.getSelection()?.getSelectedText() ?? "", { renderer })
-      return
-    }
     if (key.ctrl && key.name === "c") {
       props.onExit?.()
       return
@@ -85,6 +83,15 @@ export function Router(props: { onExit?: () => void }) {
     if (key.name === "d" && !key.ctrl && route() === "results") setRoute("downloads")
   })
 
+  const copySelection = () => {
+    const text = renderer.getSelection()?.getSelectedText() ?? ""
+    if (text === "") return
+    renderer.clearSelection()
+    void writeToClipboard(text, { renderer }).then((ok) => {
+      shell.showNotice(ok ? "Copied to clipboard" : "Copy failed")
+    })
+  }
+
   const backFrom = (current: Route): Route => {
     if (current === "settings" || current === "sources") return returnTo()
     if (current === "results") return "home"
@@ -92,34 +99,33 @@ export function Router(props: { onExit?: () => void }) {
   }
 
   return (
-    <ShellProvider>
-      <Shell route={route()}>
-        <Switch fallback={null}>
-          <Match when={route() === "home"}>
-            <Home
-              onSubmit={(query) => {
-                search.run(query)
-                setRoute("results")
-              }}
-            />
-          </Match>
-          <Match when={route() === "results"}>
-            <Results
-              onBack={() => setRoute(backFrom("results"))}
-              onDownload={() => setRoute("downloads")}
-            />
-          </Match>
-          <Match when={route() === "downloads"}>
-            <Downloads onBack={() => setRoute(backFrom("downloads"))} />
-          </Match>
-          <Match when={route() === "settings"}>
-            <Settings onBack={() => setRoute(backFrom("settings"))} onOpenSources={() => open("sources")} />
-          </Match>
-          <Match when={route() === "sources"}>
-            <Sources onBack={() => setRoute(backFrom("sources"))} />
-          </Match>
-        </Switch>
-      </Shell>
-    </ShellProvider>
+    <Shell route={route()} onCopySelection={copySelection}>
+      <Switch fallback={null}>
+        <Match when={route() === "home"}>
+          <Home
+            onSubmit={(query) => {
+              search.run(query)
+              setRoute("results")
+            }}
+            onDownload={() => setRoute("downloads")}
+          />
+        </Match>
+        <Match when={route() === "results"}>
+          <Results
+            onBack={() => setRoute(backFrom("results"))}
+            onDownload={() => setRoute("downloads")}
+          />
+        </Match>
+        <Match when={route() === "downloads"}>
+          <Downloads onBack={() => setRoute(backFrom("downloads"))} />
+        </Match>
+        <Match when={route() === "settings"}>
+          <Settings onBack={() => setRoute(backFrom("settings"))} onOpenSources={() => open("sources")} />
+        </Match>
+        <Match when={route() === "sources"}>
+          <Sources onBack={() => setRoute(backFrom("sources"))} />
+        </Match>
+      </Switch>
+    </Shell>
   )
 }

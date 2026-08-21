@@ -24,11 +24,9 @@ export function Footer(props: { route: Route }) {
 
   const context = createMemo(() => {
     switch (props.route) {
-      case "home": {
-        const c = config?.config()
-        if (c === undefined) return ""
-        return `${c.downloadDir} · ${providerCounts()} sources`
-      }
+      case "home":
+        // home carries its identity/hints in the right-hand info panel instead
+        return ""
       case "results": {
         if (search === undefined) return "results"
         const hidden = search.hiddenCount() > 0 ? ` · ${search.hiddenCount()} hidden` : ""
@@ -75,7 +73,9 @@ export function Footer(props: { route: Route }) {
       <box flexDirection="row" height={1}>
         <text fg={theme.dim}>{stats()}</text>
         <box flexGrow={1} minWidth={1} />
-        <text fg={theme.dim} flexShrink={0}>{`corvus v${APP_VERSION}`}</text>
+        <Show when={props.route !== "home"}>
+          <text fg={theme.dim} flexShrink={0}>{`corvus v${APP_VERSION}`}</text>
+        </Show>
       </box>
     </box>
   )

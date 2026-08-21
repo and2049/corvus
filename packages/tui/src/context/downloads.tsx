@@ -6,6 +6,7 @@ import { infoHashFromMagnet, type Provider, type TorrentResult } from "@corvus/p
 export interface DownloadsStore {
   readonly snapshots: () => readonly DownloadSnapshot[]
   readonly add: (result: TorrentResult, providers: readonly Provider[]) => Promise<boolean>
+  readonly addMagnet: (magnet: string) => boolean
   readonly remove: (key: string) => Promise<void>
   readonly togglePause: (key: string) => void
   readonly toggleFile: (key: string, index: number) => void
@@ -86,6 +87,16 @@ export function DownloadsProvider(props: {
     return true
   }
 
+  const addMagnet = (raw: string): boolean => {
+    const magnet = raw.trim()
+    if (infoHashFromMagnet(magnet) === undefined) return false
+    if (!addedAt.has(magnet)) addedAt.set(magnet, Date.now())
+    props.engine.add(magnet)
+    tick()
+    persistNow()
+    return true
+  }
+
   const remove = async (key: string) => {
     await props.engine.remove(key)
     tick()
@@ -114,7 +125,7 @@ export function DownloadsProvider(props: {
     persistNow()
   }
 
-  const store: DownloadsStore = { snapshots, add, remove, togglePause, toggleFile, retry, clientError: () => props.engine.clientError() }
+  const store: DownloadsStore = { snapshots, add, addMagnet, remove, togglePause, toggleFile, retry, clientError: () => props.engine.clientError() }
   return <DownloadsContext.Provider value={store}>{props.children}</DownloadsContext.Provider>
 }
 
