@@ -101,4 +101,31 @@ describe("loadDownloads", () => {
       await rm(dir, { recursive: true })
     }
   })
+
+  test("accepts soulseek entries with empty magnets and rejects entries with neither", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "corvus-state-"))
+    const file = path.join(dir, "downloads.json")
+    try {
+      await writeFile(
+        file,
+        JSON.stringify([
+          {
+            magnet: "",
+            name: "song.flac",
+            addedAt: 1,
+            done: false,
+            slsk: { username: "peer", path: "Music\\song.flac", size: 9 },
+          },
+          { magnet: "", name: "orphan", addedAt: 1, done: false },
+          { magnet: "", name: "bad-slsk", addedAt: 1, done: false, slsk: { username: "", path: "x", size: 1 } },
+          { magnet: "magnet:?xt=urn:btih:" + "ab".repeat(20), name: "torrent", addedAt: 1, done: false },
+        ]),
+      )
+      const loaded = await loadDownloads(file)
+      expect(loaded.map((entry) => entry.name)).toEqual(["song.flac", "torrent"])
+      expect(loaded[0]!.slsk).toEqual({ username: "peer", path: "Music\\song.flac", size: 9 })
+    } finally {
+      await rm(dir, { recursive: true })
+    }
+  })
 })

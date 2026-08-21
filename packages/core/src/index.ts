@@ -13,4 +13,12 @@ export {
   type ProvidersConfig,
 } from "./config"
 export { Engine, snapshotFrom, type DownloadSnapshot, type EngineOptions, type TorrentLike } from "./engine"
-export { DownloadsFile, loadDownloads, type PersistedDownload } from "./state"
+export {
+  sanitizeSlskName,
+  slskKey,
+  SoulseekDownloads,
+  type SoulseekCredentials,
+  type SoulseekDownloadsOptions,
+} from "./soulseek-downloads"
+export { DownloadsFile, loadDownloads, type PersistedDownload, type PersistedSlskFile } from "./state"
+export { looksLikeTorrentInput, magnetFromTorrentBytes, magnetFromTorrentInput } from "./torrent-file"

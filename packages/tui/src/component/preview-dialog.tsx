@@ -22,7 +22,7 @@ export function PreviewDialog(props: { result: TorrentResult }) {
       padding={1}
       gap={0}
     >
-      <text fg={theme.accent}>download this torrent?</text>
+      <text fg={theme.accent}>{r().slsk !== undefined ? "download this file?" : "download this torrent?"}</text>
       <text fg={theme.text} wrapMode="none" truncate>
         {r().title}
       </text>
@@ -52,8 +52,16 @@ export function PreviewDialog(props: { result: TorrentResult }) {
           <text fg={theme.success}>trusted</text>
         </Show>
       </box>
-      <Show when={r().magnet === ""}>
-        <text fg={theme.warning}>soulseek file - transfer support coming soon</text>
+      <Show when={r().slsk} keyed>
+        {(slsk) => (
+          <box flexDirection="row" gap={2}>
+            <box flexDirection="row" gap={1}>
+              <text fg={theme.muted}>peer</text>
+              <text fg={theme.text}>{slsk.username}</text>
+            </box>
+            <text fg={theme.dim}>{r().seeders > 0 ? "slot free" : `queue ${String(r().leechers)}`}</text>
+          </box>
+        )}
       </Show>
       <text fg={theme.dim} paddingTop={1}>
         enter download · esc cancel

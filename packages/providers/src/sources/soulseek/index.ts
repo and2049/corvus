@@ -1,18 +1,23 @@
 import { Effect } from "effect"
-import { SoulseekClient } from "./client"
+import type { SoulseekClient } from "./client"
 import type { SlskSearchResponse } from "./messages"
+import { sharedSoulseekClient } from "./transfers"
 import { ProviderError, type Provider, type TorrentResult } from "../../provider"
 
 export class Soulseek implements Provider {
   readonly name = "soulseek"
-  private readonly client = new SoulseekClient()
+  private readonly client: SoulseekClient
   private readonly credentials: {
     readonly username: string
     readonly password: string
     readonly listenPort?: number
   }
 
-  constructor(options: { username?: string; password?: string; listenPort?: number } = {}) {
+  constructor(
+    options: { username?: string; password?: string; listenPort?: number } = {},
+    client: SoulseekClient = sharedSoulseekClient(),
+  ) {
+    this.client = client
     this.credentials = {
       username: options.username ?? "",
       password: options.password ?? "",
@@ -55,5 +60,6 @@ function toResults(response: SlskSearchResponse): TorrentResult[] {
     provider: "soulseek",
     trusted: false,
     alsoOn: [],
+    slsk: { username: response.username, path: file.path, size: file.size },
   }))
 }

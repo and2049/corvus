@@ -1,12 +1,19 @@
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises"
 import path from "node:path"
 
+export interface PersistedSlskFile {
+  readonly username: string
+  readonly path: string
+  readonly size: number
+}
+
 export interface PersistedDownload {
   readonly magnet: string
   readonly name: string
   readonly addedAt: number
   readonly done: boolean
   readonly deselected?: readonly number[]
+  readonly slsk?: PersistedSlskFile
 }
 
 export async function loadDownloads(filePath: string): Promise<PersistedDownload[]> {
@@ -28,18 +35,33 @@ export async function loadDownloads(filePath: string): Promise<PersistedDownload
   return out
 }
 
+function isPersistedSlskFile(value: unknown): value is PersistedSlskFile {
+  if (typeof value !== "object" || value === null) return false
+  const record = value as Record<string, unknown>
+  return (
+    typeof record["username"] === "string" &&
+    record["username"] !== "" &&
+    typeof record["path"] === "string" &&
+    record["path"] !== "" &&
+    typeof record["size"] === "number"
+  )
+}
+
 function isPersistedDownload(value: unknown): value is PersistedDownload {
   if (typeof value !== "object" || value === null) return false
   const record = value as Record<string, unknown>
   if (
     typeof record["magnet"] !== "string" ||
-    record["magnet"] === "" ||
     typeof record["name"] !== "string" ||
     typeof record["addedAt"] !== "number" ||
     typeof record["done"] !== "boolean"
   ) {
     return false
   }
+  // A magnet identifies a torrent download; a slsk block identifies a soulseek
+  // one. Entries with neither are dropped (also rejects pre-slsk empty magnets).
+  if (record["magnet"] === "" && !isPersistedSlskFile(record["slsk"])) return false
+  if (record["slsk"] !== undefined && !isPersistedSlskFile(record["slsk"])) return false
   const deselected = record["deselected"]
   if (deselected === undefined) return true
   return Array.isArray(deselected) && deselected.every((index) => typeof index === "number" && Number.isInteger(index) && index >= 0)

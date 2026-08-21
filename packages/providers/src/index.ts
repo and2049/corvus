@@ -35,6 +35,7 @@ export {
   type FetchTextOptions,
   type HostCredential,
   type Provider,
+  type SlskFileRef,
   type TorrentResult,
 } from "./provider"
 export { createProviders as createProvidersFromRegistry, type ProviderEntry } from "./registry"
@@ -44,3 +45,13 @@ export { Nyaa, parseNyaa } from "./sources/nyaa"
 export { Eztv, parseEztv } from "./sources/eztv"
 export { X1337, parseX1337 } from "./sources/x1337"
 export { Rss, parseRssFeed, renderSearchURL } from "./sources/rss"
+export { Soulseek } from "./sources/soulseek"
+export { SoulseekClient, type ConnectionState, type SoulseekOptions } from "./sources/soulseek/client"
+export {
+  registerTransferDenier,
+  sharedSoulseekClient,
+  startTransfer,
+  type SlskDownloadRequest,
+  type SlskTransferEvent,
+  type SlskTransferHandle,
+} from "./sources/soulseek/transfers"

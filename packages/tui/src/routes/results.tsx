@@ -108,6 +108,13 @@ export function Results(props: { onBack: () => void; onDownload: () => void }) {
     const added = await downloads.add(selected, search.providers())
     setAdding(false)
     if (added) props.onDownload()
+    else {
+      shell.showNotice(
+        selected.slsk !== undefined
+          ? "configure soulseek username/password to download"
+          : "could not start download",
+      )
+    }
   }
 
   return (

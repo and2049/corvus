@@ -1,5 +1,11 @@
 import { Data, type Effect } from "effect"
 
+export interface SlskFileRef {
+  readonly username: string
+  readonly path: string
+  readonly size: number
+}
+
 export interface TorrentResult {
   readonly title: string
   readonly size: string
@@ -12,6 +18,7 @@ export interface TorrentResult {
   readonly trusted: boolean
   readonly alsoOn: readonly string[]
   readonly detailUrl?: string
+  readonly slsk?: SlskFileRef
 }
 
 export class ProviderError extends Data.TaggedError("ProviderError")<{

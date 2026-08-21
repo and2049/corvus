@@ -2,6 +2,9 @@ import { infoHashFromMagnet, unionMagnet } from "./magnet"
 import type { TorrentResult } from "./provider"
 
 export function resultKey(result: TorrentResult): string {
+  if (result.slsk !== undefined) {
+    return `soulseek:${result.slsk.username}:${result.slsk.path.toLowerCase()}`
+  }
   return infoHashFromMagnet(result.magnet) ?? `${result.provider}:${result.title.toLowerCase()}`
 }
 

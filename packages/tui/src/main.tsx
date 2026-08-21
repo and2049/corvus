@@ -8,6 +8,7 @@ import {
   loadConfig,
   loadDownloads,
   saveConfig,
+  SoulseekDownloads,
   type ConfigPatch,
   type PersistedDownload,
 } from "@corvus/core"
@@ -28,10 +29,22 @@ const engine = new Engine({
   uploadLimit: config.uploadLimit,
 })
 
+const slskConfig = config.providers["soulseek"]
+const slskDownloads = new SoulseekDownloads({
+  downloadDir: config.downloadDir,
+  credentials: {
+    username: slskConfig?.username,
+    password: slskConfig?.password,
+    listenPort: slskConfig?.listenPort,
+  },
+})
+
 const downloadsFile = new DownloadsFile(`${configDir()}/downloads.json`)
 const persisted = await loadDownloads(`${configDir()}/downloads.json`)
 for (const download of persisted) {
-  if (!download.done) engine.add(download.magnet, { deselected: download.deselected })
+  if (download.done) continue
+  if (download.slsk !== undefined) slskDownloads.add(download.slsk, download.addedAt)
+  else engine.add(download.magnet, { deselected: download.deselected })
 }
 
 let shuttingDown = false
@@ -39,6 +52,7 @@ async function shutdown(): Promise<void> {
   if (shuttingDown) return
   shuttingDown = true
   await downloadsFile.close()
+  await slskDownloads.shutdown()
   await engine.shutdown()
 }
 
@@ -63,6 +77,7 @@ await render(
     <App
       config={config}
       engine={engine}
+      slsk={slskDownloads}
       persisted={persisted}
       persist={(d: readonly PersistedDownload[]) => downloadsFile.set(d)}
       onConfigChange={(patch: ConfigPatch) => void saveConfig(patch)}

@@ -89,4 +89,41 @@ describe("mergeInto", () => {
     mergeInto(map, makeResult({ title: "B", magnet: `magnet:?xt=urn:btih:${"bb".repeat(20)}`, provider: "yts" }))
     expect(map.size).toBe(2)
   })
+
+  test("soulseek results with the same path from different peers stay separate", () => {
+    const map = new Map<string, TorrentResult>()
+    const path = "Music\\Artist\\01 - Song.flac"
+    mergeInto(
+      map,
+      makeResult({ title: path, magnet: "", provider: "soulseek", slsk: { username: "alice", path, size: 1 } }),
+    )
+    mergeInto(
+      map,
+      makeResult({ title: path, magnet: "", provider: "soulseek", slsk: { username: "bob", path, size: 1 } }),
+    )
+    expect(map.size).toBe(2)
+  })
+
+  test("soulseek results from the same peer and path dedupe case-insensitively", () => {
+    const map = new Map<string, TorrentResult>()
+    mergeInto(
+      map,
+      makeResult({
+        title: "A",
+        magnet: "",
+        provider: "soulseek",
+        slsk: { username: "alice", path: "Music\\A.flac", size: 1 },
+      }),
+    )
+    mergeInto(
+      map,
+      makeResult({
+        title: "A",
+        magnet: "",
+        provider: "soulseek",
+        slsk: { username: "alice", path: "music\\a.flac", size: 1 },
+      }),
+    )
+    expect(map.size).toBe(1)
+  })
 })

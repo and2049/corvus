@@ -1,3 +1,5 @@
+import { rm } from "node:fs/promises"
+import path from "node:path"
 import { infoHashFromMagnet } from "@corvus/providers"
 import { createWebTorrentClient, type Torrent, type TorrentClient } from "./webtorrent"
 
@@ -22,6 +24,8 @@ export interface DownloadSnapshot {
   readonly fetchingSeconds: number | undefined
   readonly error?: string
   readonly files: readonly FileSnapshot[]
+  readonly queuePosition?: number
+  readonly location?: string
 }
 
 export interface TorrentLike {
@@ -217,14 +221,23 @@ export class Engine {
     this.refresh(key, entry.torrent)
   }
 
-  async remove(key: string): Promise<void> {
+  async remove(key: string, opts?: { deleteData?: boolean }): Promise<void> {
     const entry = this.entries.get(key)
     if (entry === undefined) return
+    const deleteData = opts?.deleteData === true
     const torrent = entry.torrent
     if (torrent !== undefined) {
-      await new Promise<void>((resolve) => torrent.destroy({}, () => resolve()))
+      await new Promise<void>((resolve) => torrent.destroy({ destroyStore: deleteData }, () => resolve()))
+    } else if (deleteData) {
+      // Done torrents are already destroyed; remove their data from disk directly.
+      const location = entry.snapshot.location
+      if (location !== undefined) await rm(location, { recursive: true, force: true }).catch(() => {})
     }
     this.entries.delete(key)
+  }
+
+  magnetFor(key: string): string | undefined {
+    return this.entries.get(key)?.magnet
   }
 
   snapshots(): DownloadSnapshot[] {
@@ -255,6 +268,7 @@ export class Engine {
     const base = snapshotFrom(key, torrent)
     entry.snapshot = {
       ...base,
+      ...(torrent.name !== "" ? { location: path.join(this.options.downloadDir, torrent.name) } : {}),
       fetchingSeconds: elapsedFetching(base.state, entry.addedAt),
       files: torrent.files.map((file, index) => ({
         name: file.name,

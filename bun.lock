@@ -16,6 +16,7 @@
       "version": "0.1.0",
       "dependencies": {
         "@corvus/providers": "workspace:*",
+        "parse-torrent": "^11.0.18",
         "webtorrent": "^3.0.19",
         "yaml": "^2.4.0",
       },

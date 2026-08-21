@@ -1,10 +1,12 @@
 import type { ScrollBoxRenderable } from "@opentui/core"
-import { useKeyboard } from "@opentui/solid"
-import { createEffect, createMemo, createSignal, For, Show } from "solid-js"
+import { useKeyboard, useRenderer } from "@opentui/solid"
+import { createEffect, createMemo, createSignal, For, onCleanup, Show } from "solid-js"
 import type { DownloadSnapshot } from "@corvus/core"
 import { formatBytes } from "@corvus/providers"
+import { writeToClipboard } from "../clipboard"
 import { useDownloads } from "../context/downloads"
 import { useShell, type Hint } from "../context/shell"
+import { revealPath } from "../open-path"
 import { theme } from "../theme"
 
 const LIST_HINTS: readonly Hint[] = [
@@ -12,6 +14,9 @@ const LIST_HINTS: readonly Hint[] = [
   { key: "p", label: "pause/resume" },
   { key: "t", label: "retry" },
   { key: "r", label: "remove" },
+  { key: "shift+r", label: "delete data" },
+  { key: "o", label: "open" },
+  { key: "c", label: "copy link" },
   { key: "esc", label: "back" },
 ]
 
@@ -68,10 +73,29 @@ function followCursor(scroll: ScrollBoxRenderable | undefined, index: number): v
 export function Downloads(props: { onBack: () => void }) {
   const downloads = useDownloads()
   const shell = useShell()
+  const renderer = useRenderer()
   const [cursor, setCursor] = createSignal(0)
   const [fileCursor, setFileCursor] = createSignal(0)
   const [openKey, setOpenKey] = createSignal<string | undefined>(undefined)
+  const [armedDelete, setArmedDelete] = createSignal<string | undefined>(undefined)
+  let armTimer: ReturnType<typeof setTimeout> | undefined
+  onCleanup(() => {
+    if (armTimer !== undefined) clearTimeout(armTimer)
+  })
   let scroll: ScrollBoxRenderable | undefined
+
+  const deleteWithData = (key: string): void => {
+    if (armTimer !== undefined) clearTimeout(armTimer)
+    if (armedDelete() === key) {
+      setArmedDelete(undefined)
+      void downloads.remove(key, { deleteData: true })
+      shell.showNotice("removed download and data")
+      return
+    }
+    setArmedDelete(key)
+    armTimer = setTimeout(() => setArmedDelete(undefined), 3_000)
+    shell.showNotice("press shift+r again to also delete the data")
+  }
 
   const snapshots = createMemo(() => downloads.snapshots())
   const clientError = createMemo(() => downloads.clientError())
@@ -135,9 +159,33 @@ export function Downloads(props: { onBack: () => void }) {
       if (selected !== undefined) void downloads.retry(selected.key)
       return
     }
+    if ((key.name === "R" || (key.name === "r" && key.shift)) && !key.ctrl) {
+      const selected = snapshots()[cursor()]
+      if (selected !== undefined) deleteWithData(selected.key)
+      return
+    }
     if (key.name === "r" && !key.ctrl) {
       const selected = snapshots()[cursor()]
       if (selected !== undefined) void downloads.remove(selected.key)
+      return
+    }
+    if (key.name === "o" && !key.ctrl) {
+      const location = snapshots()[cursor()]?.location
+      if (location === undefined) return
+      void revealPath(location).then((ok) => {
+        if (!ok) shell.showNotice("could not open location")
+      })
+      return
+    }
+    if (key.name === "c" && !key.ctrl) {
+      const selected = snapshots()[cursor()]
+      if (selected === undefined) return
+      const link = downloads.magnetFor(selected.key)
+      if (link === undefined) return
+      void writeToClipboard(link, { renderer }).then(
+        (ok) => shell.showNotice(ok ? "Copied to clipboard" : "Copy failed"),
+        () => shell.showNotice("Copy failed"),
+      )
     }
   })
 
@@ -194,7 +242,9 @@ export function Downloads(props: { onBack: () => void }) {
                         {snapshot.state === "error" && snapshot.error !== undefined
                           ? `error: ${truncate(snapshot.error, 60)}`
                           : snapshot.state === "fetching"
-                            ? `fetching ${formatEta(snapshot.fetchingSeconds)}`
+                            ? snapshot.queuePosition !== undefined
+                              ? `queued #${String(snapshot.queuePosition)}`
+                              : `fetching ${formatEta(snapshot.fetchingSeconds)}`
                             : snapshot.state}
                       </text>
                     </Show>

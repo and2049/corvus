@@ -1,7 +1,7 @@
 import { createMemo, createSignal, Match, Switch } from "solid-js"
 import { useKeyboard, useRenderer } from "@opentui/solid"
 import { writeToClipboard } from "./clipboard"
-import type { ConfigPatch, CorvusConfig, Engine, PersistedDownload } from "@corvus/core"
+import type { ConfigPatch, CorvusConfig, Engine, PersistedDownload, SoulseekDownloads } from "@corvus/core"
 import { ContentFilter, createProviders } from "@corvus/providers"
 import { Shell } from "./component/shell"
 import { ConfigProvider, useConfig } from "./context/config"
@@ -17,6 +17,7 @@ import { Sources } from "./routes/sources"
 export function App(props: {
   config: CorvusConfig
   engine: Engine
+  slsk?: SoulseekDownloads
   persisted?: readonly PersistedDownload[]
   persist: (downloads: readonly PersistedDownload[]) => void
   onConfigChange?: (patch: ConfigPatch) => void
@@ -26,6 +27,7 @@ export function App(props: {
     <ConfigProvider engine={props.engine} initial={props.config} persist={props.onConfigChange}>
       <AppInner
         engine={props.engine}
+        slsk={props.slsk}
         persisted={props.persisted}
         persist={props.persist}
         onExit={props.onExit}
@@ -36,6 +38,7 @@ export function App(props: {
 
 function AppInner(props: {
   engine: Engine
+  slsk?: SoulseekDownloads
   persisted?: readonly PersistedDownload[]
   persist: (downloads: readonly PersistedDownload[]) => void
   onExit?: () => void
@@ -46,7 +49,7 @@ function AppInner(props: {
 
   return (
     <SearchProvider providers={providers()} filter={filter()} timeoutMs={config().searchTimeoutMs}>
-      <DownloadsProvider engine={props.engine} persisted={props.persisted} persist={props.persist}>
+      <DownloadsProvider engine={props.engine} slsk={props.slsk} persisted={props.persisted} persist={props.persist}>
         <ShellProvider>
           <Router onExit={props.onExit} />
         </ShellProvider>

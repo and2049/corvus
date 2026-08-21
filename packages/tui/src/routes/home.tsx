@@ -39,20 +39,20 @@ export function Home(props: {
       setMode((current) => (current === "search" ? "magnet" : "search"))
     }
   })
-  const submit = (value: unknown) => {
+  const submit = async (value: unknown) => {
     const text = String(value).trim()
     if (text === "") return
     if (mode() === "search") {
       props.onSubmit(text)
       return
     }
-    const outcome = downloads?.addMagnet(text)
+    const outcome = await downloads?.addInput(text)
     if (outcome === "added" || outcome === "duplicate") {
       if (outcome === "duplicate") shell.showNotice("already added")
       props.onDownload?.()
       return
     }
-    shell.showNotice("invalid magnet link")
+    shell.showNotice("invalid magnet or torrent")
   }
   return (
     <box flexDirection="column" flexGrow={1} minHeight={0}>
@@ -98,8 +98,8 @@ export function Home(props: {
             }}
             flexGrow={1}
             maxLength={MAGNET_MAX_LENGTH}
-            onSubmit={(value: unknown) => submit(value)}
-            placeholder={mode() === "magnet" ? "magnet link..." : "query..."}
+            onSubmit={(value: unknown) => void submit(value)}
+            placeholder={mode() === "magnet" ? "magnet, .torrent path or url..." : "query..."}
             placeholderColor={theme.dim}
             textColor={theme.text}
             focusedTextColor={theme.text}

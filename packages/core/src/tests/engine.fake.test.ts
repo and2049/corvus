@@ -35,8 +35,11 @@ class FakeTorrent {
     for (const cb of this.handlers.get(event) ?? []) (cb as (a?: unknown) => void)(arg)
   }
 
-  destroy(_opts?: { destroyStore?: boolean }, cb?: () => void): void {
+  destroyOpts: { destroyStore?: boolean } | undefined
+
+  destroy(opts?: { destroyStore?: boolean }, cb?: () => void): void {
     this.destroyed = true
+    this.destroyOpts = opts
     cb?.()
   }
 
@@ -147,7 +150,26 @@ describe("Engine", () => {
     const torrent = client.torrents[0]!
     await engine.remove(key)
     expect(torrent.destroyed).toBe(true)
+    expect(torrent.destroyOpts).toEqual({ destroyStore: false })
     expect(engine.keys()).toEqual([])
+  })
+
+  test("remove with deleteData asks webtorrent to destroy the store", async () => {
+    const [engine, client] = makeEngine()
+    const key = engine.add(MAGNET)
+    await engine.remove(key, { deleteData: true })
+    expect(client.torrents[0]!.destroyOpts).toEqual({ destroyStore: true })
+  })
+
+  test("magnetFor returns the stored magnet and location joins downloadDir with the name", () => {
+    const [engine, client] = makeEngine()
+    const key = engine.add(MAGNET)
+    expect(engine.magnetFor(key)).toBe(MAGNET)
+    expect(engine.magnetFor("missing")).toBeUndefined()
+    const torrent = client.torrents[0]!
+    torrent.name = "Test"
+    torrent.emit("download")
+    expect(engine.snapshots()[0]!.location?.endsWith("Test")).toBe(true)
   })
 
   test("pause and resume flip the snapshot state", () => {
