@@ -24,14 +24,9 @@
       "name": "@corvus/providers",
       "version": "0.1.0",
       "dependencies": {
-        "@corvus/soulseek": "workspace:*",
         "cheerio": "^1.0.0",
         "effect": "^3.16.0",
       },
-    },
-    "packages/soulseek": {
-      "name": "@corvus/soulseek",
-      "version": "0.1.0",
     },
     "packages/tui": {
       "name": "@corvus/tui",
@@ -111,8 +106,6 @@
     "@corvus/core": ["@corvus/core@workspace:packages/core"],
 
     "@corvus/providers": ["@corvus/providers@workspace:packages/providers"],
-
-    "@corvus/soulseek": ["@corvus/soulseek@workspace:packages/soulseek"],
 
     "@corvus/tui": ["@corvus/tui@workspace:packages/tui"],
 

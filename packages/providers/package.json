@@ -7,7 +7,6 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "@corvus/soulseek": "workspace:*",
     "cheerio": "^1.0.0",
     "effect": "^3.16.0"
   }
