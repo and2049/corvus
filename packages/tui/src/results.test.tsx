@@ -2,9 +2,20 @@ import { describe, expect, test } from "bun:test"
 import { testRender } from "@opentui/solid"
 import { Effect } from "effect"
 import { onMount } from "solid-js"
+import type { Engine } from "@corvus/core"
 import type { Provider, ProviderError, TorrentResult } from "@corvus/providers"
+import { DownloadsProvider } from "./context/downloads"
 import { SearchProvider, useSearch } from "./context/search"
 import { Results } from "./routes/results"
+
+const fakeEngine = {
+  snapshots: () => [],
+  magnets: () => [],
+  keys: () => [],
+  add: () => "",
+  remove: async () => {},
+  shutdown: async () => {},
+} as unknown as Engine
 
 class StubProvider implements Provider {
   readonly name = "stub"
@@ -34,8 +45,10 @@ function SearchRunner() {
 function Harness() {
   return (
     <SearchProvider providers={[new StubProvider()]}>
-      <SearchRunner />
-      <Results onBack={() => {}} />
+      <DownloadsProvider engine={fakeEngine} persist={() => {}}>
+        <SearchRunner />
+        <Results onBack={() => {}} onDownload={() => {}} />
+      </DownloadsProvider>
     </SearchProvider>
   )
 }

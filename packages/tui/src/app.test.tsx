@@ -1,11 +1,24 @@
 import { describe, expect, test } from "bun:test"
 import { testRender } from "@opentui/solid"
 import { defaultConfig } from "@corvus/core"
+import type { Engine } from "@corvus/core"
 import { App } from "./app"
+
+const fakeEngine = {
+  snapshots: () => [],
+  magnets: () => [],
+  keys: () => [],
+  add: () => "",
+  remove: async () => {},
+  shutdown: async () => {},
+} as unknown as Engine
 
 describe("App", () => {
   test("home screen renders bird art, name and search prompt", async () => {
-    const t = await testRender(() => <App config={defaultConfig()} />, { width: 100, height: 30 })
+    const t = await testRender(() => <App config={defaultConfig()} engine={fakeEngine} persist={() => {}} />, {
+      width: 100,
+      height: 30,
+    })
     await t.flush()
     const frame = t.captureCharFrame()
     expect(frame).toContain("corvus")

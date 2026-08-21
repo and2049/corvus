@@ -20,6 +20,7 @@ export interface SearchStore {
   readonly running: () => boolean
   readonly results: () => readonly TorrentResult[]
   readonly statuses: () => Readonly<Record<string, ProviderStatus>>
+  readonly providers: () => readonly Provider[]
   readonly run: (query: string) => void
   readonly reset: () => void
 }
@@ -92,7 +93,7 @@ export function SearchProvider(props: {
     setRunning(false)
   }
 
-  const store: SearchStore = { query, running, results, statuses, run, reset }
+  const store: SearchStore = { query, running, results, statuses, providers: () => props.providers, run, reset }
   return <SearchContext.Provider value={store}>{props.children}</SearchContext.Provider>
 }
 

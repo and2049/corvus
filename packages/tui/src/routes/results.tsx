@@ -1,6 +1,7 @@
 import { useKeyboard, useTerminalDimensions } from "@opentui/solid"
 import { createMemo, createSignal, For, Show } from "solid-js"
 import { formatBytes, type TorrentResult } from "@corvus/providers"
+import { useDownloads } from "../context/downloads"
 import { useSearch } from "../context/search"
 import { theme } from "../theme"
 
@@ -14,9 +15,11 @@ function truncate(text: string, maxWidth: number): string {
   return text.length <= maxWidth ? text : `${text.slice(0, Math.max(maxWidth - 3, 1))}...`
 }
 
-export function Results(props: { onBack: () => void }) {
+export function Results(props: { onBack: () => void; onDownload: () => void }) {
   const search = useSearch()
+  const downloads = useDownloads()
   const [cursor, setCursor] = createSignal(0)
+  const [adding, setAdding] = createSignal(false)
   const dims = useTerminalDimensions()
 
   const results = createMemo(() => search.results())
@@ -41,6 +44,15 @@ export function Results(props: { onBack: () => void }) {
     if (key.name === "down") {
       setCursor((c) => Math.min(Math.max(results().length - 1, 0), c + 1))
       return
+    }
+    if (key.name === "return" && !adding()) {
+      const selected = results()[cursor()]
+      if (selected === undefined) return
+      setAdding(true)
+      void downloads.add(selected, search.providers()).then(() => {
+        setAdding(false)
+        props.onDownload()
+      })
     }
   })
 
@@ -90,7 +102,7 @@ export function Results(props: { onBack: () => void }) {
         </Show>
       </box>
       <text fg={theme.dim} marginTop="auto">
-        up/down select · esc back
+        enter download · up/down select · d downloads · esc back
       </text>
     </box>
   )
