@@ -35,6 +35,12 @@ export interface FetchTextOptions {
   readonly maxBytes?: number
 }
 
+let proxyUrl: string | undefined
+
+export function setFetchProxy(url: string | undefined): void {
+  proxyUrl = url?.trim() || undefined
+}
+
 export async function fetchText(url: string, opts: FetchTextOptions = {}): Promise<string> {
   const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS
   const maxBytes = opts.maxBytes ?? MAX_RESPONSE_BYTES
@@ -42,6 +48,7 @@ export async function fetchText(url: string, opts: FetchTextOptions = {}): Promi
     headers: { "user-agent": USER_AGENT, accept: "*/*" },
     redirect: "follow",
     signal: AbortSignal.timeout(timeoutMs),
+    ...(proxyUrl !== undefined ? { proxy: proxyUrl } : {}),
   })
   const host = new URL(url).host
   if (res.status === 403 || res.status === 429 || res.status === 503) {

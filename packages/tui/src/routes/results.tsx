@@ -20,6 +20,7 @@ export function Results(props: { onBack: () => void; onDownload: () => void }) {
   const downloads = useDownloads()
   const [cursor, setCursor] = createSignal(0)
   const [adding, setAdding] = createSignal(false)
+  const [preview, setPreview] = createSignal<TorrentResult | undefined>(undefined)
   const dims = useTerminalDimensions()
 
   const results = createMemo(() => search.results())
@@ -34,6 +35,10 @@ export function Results(props: { onBack: () => void; onDownload: () => void }) {
 
   useKeyboard((key) => {
     if (key.name === "escape") {
+      if (preview() !== undefined) {
+        setPreview(undefined)
+        return
+      }
       props.onBack()
       return
     }
@@ -46,15 +51,25 @@ export function Results(props: { onBack: () => void; onDownload: () => void }) {
       return
     }
     if (key.name === "return" && !adding()) {
+      if (preview() !== undefined) {
+        void confirmDownload()
+        return
+      }
       const selected = results()[cursor()]
       if (selected === undefined) return
-      setAdding(true)
-      void downloads.add(selected, search.providers()).then(() => {
-        setAdding(false)
-        props.onDownload()
-      })
+      setPreview(selected)
     }
   })
+
+  const confirmDownload = async (): Promise<void> => {
+    const selected = preview()
+    if (selected === undefined) return
+    setPreview(undefined)
+    setAdding(true)
+    await downloads.add(selected, search.providers())
+    setAdding(false)
+    props.onDownload()
+  }
 
   return (
     <box flexDirection="column" width="100%" height="100%" paddingLeft={2} paddingRight={1}>
@@ -102,7 +117,63 @@ export function Results(props: { onBack: () => void; onDownload: () => void }) {
         </Show>
       </box>
       <text fg={theme.dim} marginTop="auto">
-        enter download · up/down select · d downloads · esc back
+        enter preview · up/down select · d downloads · esc back
+      </text>
+      <Show when={preview() !== undefined}>
+        <PreviewDialog result={preview()!} />
+      </Show>
+    </box>
+  )
+}
+
+export function PreviewDialog(props: { result: TorrentResult }) {
+  const r = () => props.result
+  return (
+    <box
+      position="absolute"
+      top="25%"
+      left="10%"
+      width="80%"
+      flexDirection="column"
+      border
+      borderStyle="rounded"
+      borderColor={theme.accent}
+      backgroundColor="#000000"
+      padding={1}
+      gap={0}
+    >
+      <text fg={theme.accent}>download this torrent?</text>
+      <text fg={theme.text} wrapMode="none" truncate>
+        {r().title}
+      </text>
+      <box flexDirection="row" gap={2} paddingTop={1}>
+        <box flexDirection="row" gap={1}>
+          <text fg={theme.subtle}>seeders</text>
+          <text fg={seedColor(r().seeders)}>{String(r().seeders)}</text>
+        </box>
+        <box flexDirection="row" gap={1}>
+          <text fg={theme.subtle}>leechers</text>
+          <text fg={theme.dim}>{String(r().leechers)}</text>
+        </box>
+        <box flexDirection="row" gap={1}>
+          <text fg={theme.subtle}>size</text>
+          <text fg={theme.text}>{formatSize(r())}</text>
+        </box>
+      </box>
+      <box flexDirection="row" gap={2}>
+        <box flexDirection="row" gap={1}>
+          <text fg={theme.subtle}>source</text>
+          <text fg={theme.dim}>{r().provider}</text>
+        </box>
+        <Show when={r().alsoOn.length > 0}>
+          <text fg={theme.dim}>also on {r().alsoOn.join(", ")}</text>
+        </Show>
+        <Show when={r().trusted}>
+          <text fg={theme.seedGood}>trusted</text>
+        </Show>
+      </box>
+      <text fg={theme.dim} paddingTop={1}>
+        enter download · esc cancel
       </text>
     </box>
   )

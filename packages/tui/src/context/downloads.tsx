@@ -7,6 +7,8 @@ export interface DownloadsStore {
   readonly snapshots: () => readonly DownloadSnapshot[]
   readonly add: (result: TorrentResult, providers: readonly Provider[]) => Promise<void>
   readonly remove: (key: string) => Promise<void>
+  readonly togglePause: (key: string) => void
+  readonly toggleFile: (key: string, index: number) => void
 }
 
 const DownloadsContext = createContext<DownloadsStore>()
@@ -63,7 +65,22 @@ export function DownloadsProvider(props: {
     persistNow()
   }
 
-  const store: DownloadsStore = { snapshots, add, remove }
+  const togglePause = (key: string) => {
+    const snapshot = props.engine.snapshots().find((s) => s.key === key)
+    if (snapshot?.state === "paused") {
+      props.engine.resume(key)
+    } else {
+      props.engine.pause(key)
+    }
+    tick()
+  }
+
+  const toggleFile = (key: string, index: number) => {
+    props.engine.toggleFile(key, index)
+    tick()
+  }
+
+  const store: DownloadsStore = { snapshots, add, remove, togglePause, toggleFile }
   return <DownloadsContext.Provider value={store}>{props.children}</DownloadsContext.Provider>
 }
 

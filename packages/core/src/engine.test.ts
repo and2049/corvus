@@ -12,6 +12,7 @@ const makeTorrent = (overrides: Partial<TorrentLike>): TorrentLike => ({
   numPeers: 0,
   timeRemaining: Infinity,
   done: false,
+  paused: false,
   ...overrides,
 })
 
@@ -47,6 +48,16 @@ describe("snapshotFrom", () => {
     const snap = snapshotFrom("k", makeTorrent({ done: true, progress: 1 }))
     expect(snap.state).toBe("done")
     expect(snap.progress).toBe(1)
+  })
+
+  test("paused state", () => {
+    const snap = snapshotFrom("k", makeTorrent({ paused: true, progress: 0.4, downloaded: 400 }))
+    expect(snap.state).toBe("paused")
+  })
+
+  test("done takes precedence over paused", () => {
+    const snap = snapshotFrom("k", makeTorrent({ done: true, progress: 1, paused: true }))
+    expect(snap.state).toBe("done")
   })
 
   test("progress is clamped to [0,1]", () => {

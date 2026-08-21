@@ -2,6 +2,8 @@ export interface TorrentFile {
   readonly name: string
   readonly path: string
   readonly length: number
+  select(priority?: number): void
+  deselect(): void
 }
 
 export interface Torrent {

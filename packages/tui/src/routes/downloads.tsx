@@ -43,9 +43,12 @@ const stateColor = (snapshot: DownloadSnapshot): string => {
 export function Downloads(props: { onBack: () => void }) {
   const downloads = useDownloads()
   const [cursor, setCursor] = createSignal(0)
+  const [fileCursor, setFileCursor] = createSignal(0)
+  const [openKey, setOpenKey] = createSignal<string | undefined>(undefined)
   const dims = useTerminalDimensions()
 
   const snapshots = createMemo(() => downloads.snapshots())
+  const openSnapshot = createMemo(() => snapshots().find((s) => s.key === openKey()))
   const visibleCount = createMemo(() => Math.max(dims().height - 6, 1))
   const offset = createMemo(() => {
     const total = snapshots().length
@@ -57,7 +60,27 @@ export function Downloads(props: { onBack: () => void }) {
 
   useKeyboard((key) => {
     if (key.name === "escape") {
+      if (openKey() !== undefined) {
+        setOpenKey(undefined)
+        return
+      }
       props.onBack()
+      return
+    }
+    if (openKey() !== undefined) {
+      const snapshot = openSnapshot()
+      if (snapshot === undefined) return
+      if (key.name === "up") {
+        setFileCursor((c) => Math.max(0, c - 1))
+        return
+      }
+      if (key.name === "down") {
+        setFileCursor((c) => Math.min(Math.max(snapshot.files.length - 1, 0), c + 1))
+        return
+      }
+      if (key.name === "space") {
+        downloads.toggleFile(snapshot.key, fileCursor())
+      }
       return
     }
     if (key.name === "up") {
@@ -68,6 +91,19 @@ export function Downloads(props: { onBack: () => void }) {
       setCursor((c) => Math.min(Math.max(snapshots().length - 1, 0), c + 1))
       return
     }
+    if (key.name === "p" && !key.ctrl) {
+      const selected = snapshots()[cursor()]
+      if (selected !== undefined) downloads.togglePause(selected.key)
+      return
+    }
+    if (key.name === "return") {
+      const selected = snapshots()[cursor()]
+      if (selected !== undefined && selected.files.length > 0) {
+        setFileCursor(0)
+        setOpenKey(selected.key)
+      }
+      return
+    }
     if (key.name === "r" && !key.ctrl) {
       const selected = snapshots()[cursor()]
       if (selected !== undefined) void downloads.remove(selected.key)
@@ -75,10 +111,12 @@ export function Downloads(props: { onBack: () => void }) {
   })
 
   return (
-    <box flexDirection="column" width="100%" height="100%" paddingLeft={2} paddingRight={1}>
-      <text fg={theme.subtle}>
-        downloads <text fg={theme.dim}>{snapshots().length}</text>
-      </text>
+    <Show when={openKey() === undefined} fallback={<FilesView snapshot={openSnapshot()} cursor={fileCursor} />}>
+      <box flexDirection="column" width="100%" height="100%" paddingLeft={2} paddingRight={1}>
+      <box flexDirection="row" gap={1}>
+        <text fg={theme.subtle}>downloads</text>
+        <text fg={theme.dim}>{snapshots().length}</text>
+      </box>
       <box flexDirection="column" paddingTop={1}>
         <For each={rows()}>
           {(snapshot, index) => {
@@ -91,11 +129,11 @@ export function Downloads(props: { onBack: () => void }) {
                 <text fg={theme.text} truncate flexGrow={1} wrapMode="none">
                   {truncate(snapshot.name, 200)}
                 </text>
-                <Show when={snapshot.state === "downloading"}>
+                <Show when={snapshot.state === "downloading" || snapshot.state === "paused"}>
                   <text fg={theme.subtle}>{formatBytes(snapshot.downloadSpeed)}/s</text>
                   <text fg={theme.dim}>{formatEta(snapshot.etaSeconds)}</text>
                 </Show>
-                <Show when={snapshot.state !== "downloading"}>
+                <Show when={snapshot.state !== "downloading" && snapshot.state !== "paused"}>
                   <text fg={stateColor(snapshot)}>{snapshot.state}</text>
                 </Show>
               </box>
@@ -107,7 +145,42 @@ export function Downloads(props: { onBack: () => void }) {
         </Show>
       </box>
       <text fg={theme.dim} marginTop="auto">
-        up/down select · r remove · esc back
+        enter files · p pause/resume · r remove · up/down select · esc back
+      </text>
+      </box>
+    </Show>
+  )
+}
+
+function FilesView(props: { snapshot: DownloadSnapshot | undefined; cursor: () => number }) {
+  const snapshot = () => props.snapshot
+  return (
+    <box flexDirection="column" width="100%" height="100%" paddingLeft={2} paddingRight={1}>
+      <text fg={theme.subtle} wrapMode="none" truncate>
+        files: {snapshot()?.name ?? ""}
+      </text>
+      <box flexDirection="column" paddingTop={1}>
+        <For each={snapshot()?.files ?? []}>
+          {(file, index) => {
+            const selected = createMemo(() => index() === props.cursor())
+            return (
+              <box flexDirection="row" gap={1}>
+                <text fg={selected() ? theme.accent : "transparent"}>{selected() ? ">" : " "}</text>
+                <text fg={file.selected ? theme.seedGood : theme.dim}>{file.selected ? "[x]" : "[ ]"}</text>
+                <text fg={selected() ? theme.text : theme.subtle} truncate flexGrow={1} wrapMode="none">
+                  {truncate(file.path, 200)}
+                </text>
+                <text fg={theme.dim}>{formatBytes(file.length).padStart(9)}</text>
+              </box>
+            )
+          }}
+        </For>
+        <Show when={(snapshot()?.files.length ?? 0) === 0}>
+          <text fg={theme.dim}>no file metadata yet</text>
+        </Show>
+      </box>
+      <text fg={theme.dim} marginTop="auto">
+        space toggle file · esc back
       </text>
     </box>
   )

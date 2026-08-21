@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import type { TorrentClient, Torrent } from "./webtorrent-types"
+import type { TorrentClient, Torrent, TorrentFile } from "./webtorrent-types"
 import { Engine } from "./engine"
 
 const MAGNET = `magnet:?xt=urn:btih:${"ab".repeat(20)}&dn=Test`
@@ -17,7 +17,7 @@ class FakeTorrent {
   timeRemaining = Number.POSITIVE_INFINITY
   done = false
   paused = false
-  files = []
+  files: TorrentFile[] = []
   destroyed = false
   private readonly handlers = new Map<string, ((...args: never[]) => void)[]>()
 
@@ -40,8 +40,13 @@ class FakeTorrent {
     cb?.()
   }
 
-  pause(): void {}
-  resume(): void {}
+  pause(): void {
+    this.paused = true
+  }
+
+  resume(): void {
+    this.paused = false
+  }
 }
 
 class FakeClient implements TorrentClient {
@@ -125,4 +130,44 @@ describe("Engine", () => {
     expect(torrent.destroyed).toBe(true)
     expect(engine.keys()).toEqual([])
   })
+
+  test("pause and resume flip the snapshot state", () => {
+    const [engine, client] = makeEngine()
+    const key = engine.add(MAGNET)
+    const torrent = client.torrents[0]!
+    torrent.progress = 0.5
+    torrent.downloaded = 500
+    engine.pause(key)
+    expect(torrent.paused).toBe(true)
+    expect(engine.snapshots()[0]!.state).toBe("paused")
+    engine.resume(key)
+    expect(torrent.paused).toBe(false)
+    expect(engine.snapshots()[0]!.state).toBe("downloading")
+  })
+
+  test("toggleFile flips selection and calls select/deselect", () => {
+    const [engine, client] = makeEngine()
+    const key = engine.add(MAGNET)
+    const torrent = client.torrents[0]!
+    torrent.files = [
+      makeFakeFile("a.mkv", "/dl/a.mkv", 100),
+      makeFakeFile("b.srt", "/dl/b.srt", 1),
+    ]
+    torrent.emit("info")
+    expect(engine.snapshots()[0]!.files.map((f) => f.selected)).toEqual([true, true])
+    engine.toggleFile(key, 0)
+    expect(engine.snapshots()[0]!.files.map((f) => f.selected)).toEqual([false, true])
+    engine.toggleFile(key, 0)
+    expect(engine.snapshots()[0]!.files.map((f) => f.selected)).toEqual([true, true])
+  })
 })
+
+function makeFakeFile(name: string, filePath: string, length: number): TorrentFile {
+  return {
+    name,
+    path: filePath,
+    length,
+    select: () => {},
+    deselect: () => {},
+  }
+}

@@ -18,6 +18,7 @@ export interface CorvusConfig {
   readonly seedAfterComplete: boolean
   readonly searchTimeoutMs: number
   readonly hideNSFW: boolean
+  readonly proxy?: string
   readonly providers: ProvidersConfig
 }
 

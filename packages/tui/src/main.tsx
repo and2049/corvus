@@ -8,9 +8,11 @@ import {
   loadDownloads,
   type PersistedDownload,
 } from "@corvus/core"
+import { setFetchProxy } from "@corvus/providers"
 import { App } from "./app"
 
 const config = await loadConfig()
+setFetchProxy(config.proxy)
 await mkdir(config.downloadDir, { recursive: true })
 
 const engine = new Engine({

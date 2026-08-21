@@ -19,6 +19,7 @@ export {
   matchesQuery,
   ProviderError,
   parseHumanSize,
+  setFetchProxy,
   type FetchTextOptions,
   type Provider,
   type TorrentResult,

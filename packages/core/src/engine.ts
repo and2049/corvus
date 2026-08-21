@@ -1,10 +1,17 @@
 import { infoHashFromMagnet } from "@corvus/providers"
 import { createWebTorrentClient, type Torrent, type TorrentClient } from "./webtorrent"
 
+export interface FileSnapshot {
+  readonly name: string
+  readonly path: string
+  readonly length: number
+  readonly selected: boolean
+}
+
 export interface DownloadSnapshot {
   readonly key: string
   readonly name: string
-  readonly state: "fetching" | "downloading" | "done" | "error"
+  readonly state: "fetching" | "downloading" | "paused" | "done" | "error"
   readonly progress: number
   readonly downloadedBytes: number
   readonly totalBytes: number
@@ -13,6 +20,7 @@ export interface DownloadSnapshot {
   readonly peers: number
   readonly etaSeconds: number | undefined
   readonly error?: string
+  readonly files: readonly FileSnapshot[]
 }
 
 export interface TorrentLike {
@@ -26,6 +34,7 @@ export interface TorrentLike {
   readonly numPeers: number
   readonly timeRemaining: number
   readonly done: boolean
+  readonly paused: boolean
 }
 
 export function snapshotFrom(key: string, torrent: TorrentLike): DownloadSnapshot {
@@ -36,7 +45,13 @@ export function snapshotFrom(key: string, torrent: TorrentLike): DownloadSnapsho
   return {
     key,
     name: torrent.name !== "" ? torrent.name : key,
-    state: torrent.done ? "done" : torrent.progress > 0 || torrent.downloaded > 0 ? "downloading" : "fetching",
+    state: torrent.done
+      ? "done"
+      : torrent.paused
+        ? "paused"
+        : torrent.progress > 0 || torrent.downloaded > 0
+          ? "downloading"
+          : "fetching",
     progress: Math.min(Math.max(torrent.progress, 0), 1),
     downloadedBytes: torrent.downloaded,
     totalBytes: torrent.length,
@@ -44,6 +59,7 @@ export function snapshotFrom(key: string, torrent: TorrentLike): DownloadSnapsho
     uploadSpeed: torrent.uploadSpeed,
     peers: torrent.numPeers,
     etaSeconds: eta,
+    files: [],
   }
 }
 
@@ -51,6 +67,7 @@ interface Entry {
   magnet: string
   snapshot: DownloadSnapshot
   torrent?: Torrent
+  selection: boolean[] | undefined
 }
 
 export interface EngineOptions {
@@ -74,17 +91,21 @@ export class Engine {
   add(magnet: string): string {
     const key = infoHashFromMagnet(magnet) ?? magnet
     if (this.entries.has(key)) return key
-    this.entries.set(key, { magnet, snapshot: emptySnapshot(key) })
+    this.entries.set(key, { magnet, snapshot: emptySnapshot(key), selection: undefined })
     let torrent: Torrent
     try {
       torrent = this.client.add(magnet, { path: this.options.downloadDir })
     } catch (error) {
-      this.entries.set(key, { magnet, snapshot: errorSnapshot(key, String(error)) })
+      this.entries.set(key, { magnet, snapshot: errorSnapshot(key, String(error)), selection: undefined })
       return key
     }
     const entry = this.entries.get(key)!
     entry.torrent = torrent
     torrent.on("download", () => this.refresh(key, torrent))
+    torrent.on("info", () => {
+      if (entry.selection === undefined) entry.selection = torrent.files.map(() => true)
+      this.refresh(key, torrent)
+    })
     torrent.on("done", () => {
       this.refresh(key, torrent)
       if (!this.seedAfterComplete) {
@@ -104,6 +125,35 @@ export class Engine {
       this.entries.set(key, { ...entry, torrent: undefined, snapshot: errorSnapshot(key, String(err)) })
     })
     return key
+  }
+
+  pause(key: string): void {
+    const entry = this.entries.get(key)
+    if (entry?.torrent === undefined || entry.snapshot.state === "done") return
+    entry.torrent.pause()
+    this.refresh(key, entry.torrent)
+  }
+
+  resume(key: string): void {
+    const entry = this.entries.get(key)
+    if (entry?.torrent === undefined || entry.snapshot.state === "done") return
+    entry.torrent.resume()
+    this.refresh(key, entry.torrent)
+  }
+
+  toggleFile(key: string, index: number): void {
+    const entry = this.entries.get(key)
+    if (entry?.torrent === undefined || entry.selection === undefined) return
+    const file = entry.torrent.files[index]
+    if (file === undefined) return
+    if (entry.selection[index]!) {
+      entry.selection[index] = false
+      file.deselect()
+    } else {
+      entry.selection[index] = true
+      file.select()
+    }
+    this.refresh(key, entry.torrent)
   }
 
   async remove(key: string): Promise<void> {
@@ -141,7 +191,20 @@ export class Engine {
   private refresh(key: string, torrent: Torrent): void {
     const entry = this.entries.get(key)
     if (entry === undefined) return
-    this.entries.set(key, { ...entry, snapshot: snapshotFrom(key, torrent) })
+    const base = snapshotFrom(key, torrent)
+    const snapshot: DownloadSnapshot =
+      entry.selection === undefined
+        ? base
+        : {
+            ...base,
+            files: torrent.files.map((file, index) => ({
+              name: file.name,
+              path: file.path,
+              length: file.length,
+              selected: entry.selection![index] ?? true,
+            })),
+          }
+    this.entries.set(key, { ...entry, snapshot })
   }
 }
 
@@ -157,6 +220,7 @@ function emptySnapshot(key: string): DownloadSnapshot {
     uploadSpeed: 0,
     peers: 0,
     etaSeconds: undefined,
+    files: [],
   }
 }
 
