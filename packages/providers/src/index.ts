@@ -12,6 +12,17 @@ export {
 export { builtinSources, createProviders } from "./createProviders"
 export { betterKeeper, mergeAll, mergeInto, mergeResult, resultKey } from "./merge"
 export {
+  DEFAULT_WEIGHTS,
+  normalizeTitle,
+  rankResults,
+  relevance,
+  scoreResult,
+  type RankedResults,
+  type RankOptions,
+  type RankWeights,
+  type SortMode,
+} from "./rank"
+export {
   atoiDefault,
   fetchText,
   formatBytes,
@@ -19,8 +30,10 @@ export {
   matchesQuery,
   ProviderError,
   parseHumanSize,
+  setFetchCookies,
   setFetchProxy,
   type FetchTextOptions,
+  type HostCredential,
   type Provider,
   type TorrentResult,
 } from "./provider"

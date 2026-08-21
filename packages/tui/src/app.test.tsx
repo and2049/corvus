@@ -27,4 +27,17 @@ describe("App", () => {
     expect(frame.includes("⣿")).toBe(true)
     await t.renderer.destroy()
   })
+
+  test("shell footer shows identity, stats and route hints", async () => {
+    const t = await testRender(() => <App config={defaultConfig()} engine={fakeEngine} persist={() => {}} />, {
+      width: 100,
+      height: 30,
+    })
+    await t.flush()
+    const frame = t.captureCharFrame()
+    expect(frame).toContain("corvus v0.1.0")
+    expect(frame).toContain("idle")
+    expect(frame).toContain("ctrl+g settings")
+    await t.renderer.destroy()
+  })
 })

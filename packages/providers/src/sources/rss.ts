@@ -3,6 +3,7 @@ import { buildMagnet } from "../magnet"
 import {
   atoiDefault,
   humanSizeBinary,
+  matchesQuery,
   ProviderError,
   fetchText,
   type Provider,
@@ -25,13 +26,17 @@ export class Rss implements Provider {
     }
     const q = query.trim()
     if (q === "") return Effect.succeed([])
+    const templated = hasPlaceholder(this.searchUrl)
     return Effect.tryPromise({
       try: () => fetchText(renderSearchURL(this.searchUrl, q)),
       catch: (cause): ProviderError => new ProviderError({ provider: this.name, message: String(cause) }),
     }).pipe(
       Effect.flatMap((body) =>
         Effect.try({
-          try: () => parseRssFeed(body, this.name),
+          try: () => {
+            const results = parseRssFeed(body, this.name)
+            return templated ? results : results.filter((r) => matchesQuery(r.title, q))
+          },
           catch: (): ProviderError => new ProviderError({ provider: this.name, message: "failed to parse feed" }),
         }),
       ),
@@ -44,6 +49,10 @@ export function renderSearchURL(template: string, query: string): string {
   if (template.includes("{query}")) return template.replaceAll("{query}", escaped)
   if (template.includes("%s")) return template.replace("%s", escaped)
   return template
+}
+
+function hasPlaceholder(template: string): boolean {
+  return template.includes("{query}") || template.includes("%s")
 }
 
 interface Attrs {

@@ -29,7 +29,7 @@ export function buildMagnet(infoHash: string, displayName: string, trackers: rea
 }
 
 const BASE32_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"
-const BTIH_RE = /urn:btih:([A-Za-z2-7]{32}|[A-Fa-f0-9]{40})/
+const BTIH_RE = /urn:btih:([A-Za-z0-9]{32,40})/
 
 function base32ToHex(input: string): string | undefined {
   let bits = 0
@@ -51,9 +51,7 @@ function base32ToHex(input: string): string | undefined {
 export function infoHashFromMagnet(magnet: string): string | undefined {
   const match = BTIH_RE.exec(magnet)
   if (!match) return undefined
-  const raw = match[1]!
-  if (raw.length === 40) return raw.toLowerCase()
-  return base32ToHex(raw)
+  return normalizeBtih(match[1]!)
 }
 
 export interface ParsedMagnet {

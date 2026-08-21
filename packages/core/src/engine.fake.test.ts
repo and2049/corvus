@@ -63,8 +63,8 @@ class FakeClient implements TorrentClient {
     return torrent
   }
 
-  get(): undefined {
-    return undefined
+  get(): Promise<Torrent | null> {
+    return Promise.resolve(null)
   }
 
   remove(): void {}
@@ -122,6 +122,17 @@ describe("Engine", () => {
     expect(snap.error).toContain("boom")
   })
 
+  test("a duplicate-torrent error does not clobber a healthy download", () => {
+    const [engine, client] = makeEngine()
+    engine.add(MAGNET)
+    const torrent = client.torrents[0]!
+    torrent.progress = 0.5
+    torrent.downloaded = 500
+    engine.snapshots()
+    torrent.emit("error", new Error("Cannot add duplicate torrent ab..."))
+    expect(engine.snapshots()[0]!.state).toBe("downloading")
+  })
+
   test("remove destroys the torrent and drops the entry", async () => {
     const [engine, client] = makeEngine()
     const key = engine.add(MAGNET)
@@ -143,6 +154,22 @@ describe("Engine", () => {
     engine.resume(key)
     expect(torrent.paused).toBe(false)
     expect(engine.snapshots()[0]!.state).toBe("downloading")
+  })
+
+  test("selection survives a snapshot poll before metadata arrives", () => {
+    const [engine, client] = makeEngine()
+    const key = engine.add(MAGNET)
+    const torrent = client.torrents[0]!
+    // TUI polls once per second; a poll almost always lands before "info"
+    engine.snapshots()
+    torrent.files = [
+      makeFakeFile("a.mkv", "/dl/a.mkv", 100),
+      makeFakeFile("b.srt", "/dl/b.srt", 1),
+    ]
+    torrent.emit("info")
+    expect(engine.snapshots()[0]!.files.map((f) => f.selected)).toEqual([true, true])
+    engine.toggleFile(key, 0)
+    expect(engine.snapshots()[0]!.files.map((f) => f.selected)).toEqual([false, true])
   })
 
   test("toggleFile flips selection and calls select/deselect", () => {

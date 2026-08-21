@@ -22,7 +22,7 @@ export function Logo() {
   return (
     <box flexDirection="column">
       {DOVE_ART.map((line) => (
-        <text fg={theme.bird}>{line === "" ? " " : line}</text>
+        <text fg={theme.muted}>{line === "" ? " " : line}</text>
       ))}
     </box>
   )

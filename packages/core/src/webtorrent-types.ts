@@ -34,7 +34,8 @@ export interface TorrentClient {
     opts?: Record<string, unknown>,
     ontorrent?: (torrent: Torrent) => void,
   ): Torrent
-  get(torrentId: string | Record<string, unknown>): Torrent | undefined
+  // webtorrent v3 returns a Promise here, not a Torrent - do not use it synchronously
+  get(torrentId: string | Record<string, unknown>): Promise<Torrent | null>
   remove(torrentId: string | Torrent, opts?: { destroyStore?: boolean }, cb?: () => void): void
   on(event: string, cb: (...args: never[]) => void): void
   destroy(cb?: (err?: Error) => void): Promise<void> | void

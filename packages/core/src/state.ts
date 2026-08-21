@@ -60,8 +60,14 @@ export class DownloadsFile {
 
   async flush(): Promise<void> {
     if (!this.dirty) return
-    await writeFileAtomic(this.filePath, JSON.stringify(this.pending, null, 2))
+    const data = this.pending
     this.dirty = false
+    try {
+      await writeFileAtomic(this.filePath, JSON.stringify(data, null, 2))
+    } catch (error) {
+      this.dirty = true
+      throw error
+    }
   }
 
   private async flushIfDirty(): Promise<void> {

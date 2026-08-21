@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
-import { createProviders, type ProviderEntry } from "./registry"
+import { createProviders, type ProviderEntry, type SourceOptions } from "./registry"
 import type { Provider, TorrentResult } from "./provider"
 
 function fakeProvider(name: string): Provider {
@@ -53,6 +53,32 @@ describe("createProviders", () => {
     }
     const providers = createProviders(entries, testSources)
     expect(providers.map((p) => p.name)).toEqual(["pack-1", "pack-2"])
+  })
+
+  test("passes credentials and endpoints through to the factory", () => {
+    let received: SourceOptions | undefined
+    const sources = [
+      {
+        type: "soulseek",
+        create: (o: SourceOptions) => {
+          received = o
+          return fakeProvider(o.name ?? "soulseek")
+        },
+      },
+    ]
+    const entries: Record<string, ProviderEntry> = {
+      soulseek: { enabled: true, username: "user", password: "pass", listenPort: 2240 },
+    }
+    createProviders(entries, sources)
+    expect(received).toEqual({
+      name: "soulseek",
+      baseUrl: undefined,
+      baseUrls: undefined,
+      searchUrl: undefined,
+      username: "user",
+      password: "pass",
+      listenPort: 2240,
+    })
   })
 
   test("custom entries sort alphabetically after builtins", () => {

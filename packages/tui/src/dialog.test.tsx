@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { testRender } from "@opentui/solid"
 import type { TorrentResult } from "@corvus/providers"
-import { PreviewDialog } from "./routes/results"
+import { PreviewDialog } from "./component/preview-dialog"
 
 const result: TorrentResult = {
   title: "Stub Movie 2024 1080p",

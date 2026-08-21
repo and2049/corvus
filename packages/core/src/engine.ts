@@ -73,37 +73,56 @@ interface Entry {
 export interface EngineOptions {
   readonly downloadDir: string
   readonly seedAfterComplete?: boolean
+  readonly torrentPort?: number
+  readonly maxConns?: number
 }
 
 export class Engine {
   private readonly client: TorrentClient
   private readonly entries = new Map<string, Entry>()
-  private readonly seedAfterComplete: boolean
+  private seedAfterComplete: boolean
+  private lastClientError: string | undefined
 
   constructor(
     private readonly options: EngineOptions,
-    client: TorrentClient = createWebTorrentClient(),
+    client: TorrentClient = createWebTorrentClient({
+      torrentPort: options.torrentPort,
+      maxConns: options.maxConns,
+    }),
   ) {
     this.client = client
     this.seedAfterComplete = options.seedAfterComplete ?? false
+    this.client.on("error", (err: Error) => {
+      this.lastClientError = String(err)
+    })
+  }
+
+  clientError(): string | undefined {
+    return this.lastClientError
+  }
+
+  setSeedAfterComplete(value: boolean): void {
+    this.seedAfterComplete = value
   }
 
   add(magnet: string): string {
     const key = infoHashFromMagnet(magnet) ?? magnet
     if (this.entries.has(key)) return key
-    this.entries.set(key, { magnet, snapshot: emptySnapshot(key), selection: undefined })
+    const entry: Entry = { magnet, snapshot: emptySnapshot(key), selection: undefined }
+    this.entries.set(key, entry)
     let torrent: Torrent
     try {
       torrent = this.client.add(magnet, { path: this.options.downloadDir })
     } catch (error) {
-      this.entries.set(key, { magnet, snapshot: errorSnapshot(key, String(error)), selection: undefined })
+      entry.snapshot = errorSnapshot(key, String(error))
       return key
     }
-    const entry = this.entries.get(key)!
     entry.torrent = torrent
     torrent.on("download", () => this.refresh(key, torrent))
     torrent.on("info", () => {
-      if (entry.selection === undefined) entry.selection = torrent.files.map(() => true)
+      const current = this.entries.get(key)
+      if (current === undefined) return
+      if (current.selection === undefined) current.selection = torrent.files.map(() => true)
       this.refresh(key, torrent)
     })
     torrent.on("done", () => {
@@ -112,17 +131,19 @@ export class Engine {
         torrent.destroy()
         const current = this.entries.get(key)
         if (current !== undefined) {
-          this.entries.set(key, {
-            ...current,
-            torrent: undefined,
-            snapshot: { ...current.snapshot, state: "done", progress: 1 },
-          })
+          current.torrent = undefined
+          current.snapshot = { ...current.snapshot, state: "done", progress: 1 }
         }
       }
     })
     torrent.on("error", (err: Error) => {
-      entry.torrent = undefined
-      this.entries.set(key, { ...entry, torrent: undefined, snapshot: errorSnapshot(key, String(err)) })
+      const current = this.entries.get(key)
+      if (current === undefined) return
+      // A duplicate-add error is fired on the ORIGINAL (healthy) torrent; ignore it
+      // so a redundant add never destroys a working download.
+      if (String(err).toLowerCase().includes("duplicate")) return
+      current.torrent = undefined
+      current.snapshot = errorSnapshot(key, String(err))
     })
     return key
   }
@@ -192,7 +213,7 @@ export class Engine {
     const entry = this.entries.get(key)
     if (entry === undefined) return
     const base = snapshotFrom(key, torrent)
-    const snapshot: DownloadSnapshot =
+    entry.snapshot =
       entry.selection === undefined
         ? base
         : {
@@ -204,7 +225,6 @@ export class Engine {
               selected: entry.selection![index] ?? true,
             })),
           }
-    this.entries.set(key, { ...entry, snapshot })
   }
 }
 

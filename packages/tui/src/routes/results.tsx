@@ -1,37 +1,68 @@
-import { useKeyboard, useTerminalDimensions } from "@opentui/solid"
-import { createMemo, createSignal, For, Show } from "solid-js"
-import { formatBytes, type TorrentResult } from "@corvus/providers"
+import type { ScrollBoxRenderable } from "@opentui/core"
+import { useKeyboard } from "@opentui/solid"
+import { createEffect, createMemo, createSignal, For, onCleanup, Show } from "solid-js"
+import type { TorrentResult } from "@corvus/providers"
+import { PreviewDialog } from "../component/preview-dialog"
+import { Spinner } from "../component/spinner"
 import { useDownloads } from "../context/downloads"
 import { useSearch } from "../context/search"
-import { theme } from "../theme"
+import { useShell, type Hint } from "../context/shell"
+import { formatSize } from "../format"
+import { seedColor, theme } from "../theme"
 
-const seedColor = (seeders: number): string =>
-  seeders >= 50 ? theme.seedGood : seeders >= 10 ? theme.seedMid : theme.seedLow
+const RESULTS_HINTS: readonly Hint[] = [
+  { key: "enter", label: "preview" },
+  { key: "o", label: "sort" },
+  { key: "h", label: "hidden" },
+  { key: "d", label: "downloads" },
+  { key: "esc", label: "back" },
+]
 
-const formatSize = (result: TorrentResult): string =>
-  result.sizeBytes > 0 ? formatBytes(result.sizeBytes) : result.size === "" ? "-" : result.size
+const PREVIEW_HINTS: readonly Hint[] = [
+  { key: "enter", label: "download" },
+  { key: "esc", label: "cancel" },
+]
 
 function truncate(text: string, maxWidth: number): string {
   return text.length <= maxWidth ? text : `${text.slice(0, Math.max(maxWidth - 3, 1))}...`
 }
 
+const PROVIDER_COL = 10
+
+const providerLabel = (result: TorrentResult): string => {
+  const label = result.provider + (result.alsoOn.length > 0 ? `+${result.alsoOn.length}` : "")
+  return label.length > PROVIDER_COL ? label.slice(0, PROVIDER_COL) : label.padEnd(PROVIDER_COL)
+}
+
 export function Results(props: { onBack: () => void; onDownload: () => void }) {
   const search = useSearch()
   const downloads = useDownloads()
+  const shell = useShell()
   const [cursor, setCursor] = createSignal(0)
   const [adding, setAdding] = createSignal(false)
   const [preview, setPreview] = createSignal<TorrentResult | undefined>(undefined)
-  const dims = useTerminalDimensions()
+  let scroll: ScrollBoxRenderable | undefined
 
   const results = createMemo(() => search.results())
-  const visibleCount = createMemo(() => Math.max(dims().height - 8, 1))
-  const offset = createMemo(() => {
-    const total = results().length
-    if (total <= visibleCount()) return 0
-    const half = Math.floor(visibleCount() / 2)
-    return Math.max(0, Math.min(cursor() - half, total - visibleCount()))
+
+  // Keep the cursor row inside the scrollbox viewport.
+  createEffect(() => {
+    const index = cursor()
+    void results().length
+    if (scroll === undefined) return
+    const target = scroll.getChildren()[index]
+    if (target === undefined) return
+    const y = target.y - scroll.y
+    if (y >= scroll.height) scroll.scrollBy(y - scroll.height + 1)
+    else if (y < 0) scroll.scrollBy(y)
   })
-  const rows = createMemo(() => results().slice(offset(), offset() + visibleCount()))
+
+  createEffect(() => {
+    const selected = preview()
+    shell.setOverlay(selected === undefined ? undefined : () => <PreviewDialog result={selected} />)
+    shell.setHints(selected === undefined ? RESULTS_HINTS : PREVIEW_HINTS)
+  })
+  onCleanup(() => shell.setOverlay(undefined))
 
   useKeyboard((key) => {
     if (key.name === "escape") {
@@ -48,6 +79,14 @@ export function Results(props: { onBack: () => void; onDownload: () => void }) {
     }
     if (key.name === "down") {
       setCursor((c) => Math.min(Math.max(results().length - 1, 0), c + 1))
+      return
+    }
+    if (preview() === undefined && key.name === "h") {
+      search.toggleHidden()
+      return
+    }
+    if (preview() === undefined && key.name === "o") {
+      search.cycleSort()
       return
     }
     if (key.name === "return" && !adding()) {
@@ -72,15 +111,24 @@ export function Results(props: { onBack: () => void; onDownload: () => void }) {
   }
 
   return (
-    <box flexDirection="column" width="100%" height="100%" paddingLeft={2} paddingRight={1}>
-      <box flexDirection="row" gap={1}>
-        <text fg={theme.subtle}>search:</text>
+    <box flexDirection="column" flexGrow={1} minHeight={0} width="100%">
+      <box flexDirection="row" gap={1} flexShrink={0}>
+        <text fg={theme.muted}>search:</text>
         <text fg={theme.text}>{search.query()}</text>
-        <text fg={theme.dim}>
-          {search.running() ? "searching..." : `${results().length} results`}
-        </text>
+        <Show
+          when={search.running()}
+          fallback={<text fg={theme.dim}>{`${results().length} results`}</text>}
+        >
+          <Spinner message="searching..." />
+        </Show>
+        <text fg={theme.dim}>{`· sort: ${search.sortMode()}`}</text>
+        <Show when={search.hiddenCount() > 0}>
+          <text fg={theme.warning}>
+            {search.showHidden() ? `· ${search.hiddenCount()} unrelated shown` : `· ${search.hiddenCount()} hidden (h)`}
+          </text>
+        </Show>
       </box>
-      <text fg={theme.dim}>
+      <text fg={theme.dim} flexShrink={0}>
         {Object.entries(search.statuses())
           .map(([name, status]) => {
             if (status.state === "pending") return `${name} ...`
@@ -89,95 +137,55 @@ export function Results(props: { onBack: () => void; onDownload: () => void }) {
           })
           .join("  |  ")}
       </text>
-      <box flexDirection="column" paddingTop={1}>
-        <For each={rows()}>
-          {(result, index) => {
-            const rowIndex = createMemo(() => offset() + index())
-            const selected = createMemo(() => rowIndex() === cursor())
-            return (
-              <box flexDirection="row" gap={1}>
-                <text fg={selected() ? theme.accent : "transparent"}>
-                  {selected() ? ">" : " "}
-                </text>
-                <text fg={selected() ? theme.accent : theme.text} truncate flexGrow={1} wrapMode="none">
-                  {result.trusted ? `${truncate(result.title, 200)} [trusted]` : truncate(result.title, 200)}
-                </text>
-                <text fg={seedColor(result.seeders)}>{String(result.seeders).padStart(4)}</text>
-                <text fg={theme.subtle}>{formatSize(result).padStart(9)}</text>
-                <text fg={theme.dim}>
-                  {result.provider}
-                  {result.alsoOn.length > 0 ? `+${result.alsoOn.length}` : ""}
-                </text>
-              </box>
-            )
-          }}
-        </For>
+      <box flexGrow={1} minHeight={0} flexDirection="column" paddingTop={1}>
+        <scrollbox
+          ref={(el: ScrollBoxRenderable) => (scroll = el)}
+          flexGrow={1}
+          viewportOptions={{ paddingRight: 1 }}
+        >
+          <For each={results()}>
+            {(result, index) => {
+              const selected = createMemo(() => index() === cursor())
+              return (
+                <box
+                  flexDirection="row"
+                  gap={1}
+                  flexShrink={0}
+                  width="100%"
+                  height={1}
+                  backgroundColor={selected() ? theme.selectedBg : undefined}
+                >
+                  <text flexShrink={0} fg={selected() ? theme.accent : "transparent"}>
+                    {selected() ? "›" : " "}
+                  </text>
+                  <text
+                    fg={selected() ? theme.accent : theme.text}
+                    truncate
+                    flexGrow={1}
+                    flexShrink={1}
+                    minWidth={0}
+                    wrapMode="none"
+                  >
+                    {result.trusted ? `${result.title} [trusted]` : result.title}
+                  </text>
+                  <text flexShrink={0} fg={seedColor(result.seeders)}>
+                    {String(result.seeders).padStart(4)}
+                  </text>
+                  <text flexShrink={0} fg={theme.muted}>
+                    {formatSize(result).padStart(9)}
+                  </text>
+                  <text flexShrink={0} fg={theme.dim}>
+                    {providerLabel(result)}
+                  </text>
+                </box>
+              )
+            }}
+          </For>
+        </scrollbox>
         <Show when={results().length === 0}>
           <text fg={theme.dim}>{search.running() ? "searching..." : "no results"}</text>
         </Show>
       </box>
-      <text fg={theme.dim} marginTop="auto">
-        enter preview · up/down select · d downloads · esc back
-      </text>
-      <Show when={preview() !== undefined}>
-        <PreviewDialog result={preview()!} />
-      </Show>
-    </box>
-  )
-}
-
-export function PreviewDialog(props: { result: TorrentResult }) {
-  const r = () => props.result
-  return (
-    <box
-      position="absolute"
-      top="25%"
-      left="10%"
-      width="80%"
-      flexDirection="column"
-      border
-      borderStyle="rounded"
-      borderColor={theme.accent}
-      backgroundColor="#000000"
-      padding={1}
-      gap={0}
-    >
-      <text fg={theme.accent}>download this torrent?</text>
-      <text fg={theme.text} wrapMode="none" truncate>
-        {r().title}
-      </text>
-      <box flexDirection="row" gap={2} paddingTop={1}>
-        <box flexDirection="row" gap={1}>
-          <text fg={theme.subtle}>seeders</text>
-          <text fg={seedColor(r().seeders)}>{String(r().seeders)}</text>
-        </box>
-        <box flexDirection="row" gap={1}>
-          <text fg={theme.subtle}>leechers</text>
-          <text fg={theme.dim}>{String(r().leechers)}</text>
-        </box>
-        <box flexDirection="row" gap={1}>
-          <text fg={theme.subtle}>size</text>
-          <text fg={theme.text}>{formatSize(r())}</text>
-        </box>
-      </box>
-      <box flexDirection="row" gap={2}>
-        <box flexDirection="row" gap={1}>
-          <text fg={theme.subtle}>source</text>
-          <text fg={theme.dim}>{r().provider}</text>
-        </box>
-        <Show when={r().alsoOn.length > 0}>
-          <text fg={theme.dim}>also on {r().alsoOn.join(", ")}</text>
-        </Show>
-        <Show when={r().trusted}>
-          <text fg={theme.seedGood}>trusted</text>
-        </Show>
-      </box>
-      <Show when={r().magnet === ""}>
-        <text fg={theme.seedMid}>soulseek file - transfer support coming soon</text>
-      </Show>
-      <text fg={theme.dim} paddingTop={1}>
-        enter download · esc cancel
-      </text>
     </box>
   )
 }

@@ -56,6 +56,9 @@ export function createProviders(
       baseUrl: entry.baseUrl,
       baseUrls: entry.baseUrls,
       searchUrl: entry.searchUrl,
+      username: entry.username,
+      password: entry.password,
+      listenPort: entry.listenPort,
     })
     for (const provider of Array.isArray(created) ? created : [created]) {
       out.push(provider)

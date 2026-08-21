@@ -15,16 +15,32 @@ const DownloadsContext = createContext<DownloadsStore>()
 
 export function DownloadsProvider(props: {
   engine: Engine
+  persisted?: readonly PersistedDownload[]
   persist: (downloads: readonly PersistedDownload[]) => void
   children: JSX.Element
 }) {
   const [snapshots, setSnapshots] = createSignal<readonly DownloadSnapshot[]>(props.engine.snapshots())
 
-  const tick = () => setSnapshots(props.engine.snapshots())
+  const addedAt = new Map<string, number>()
+  for (const download of props.persisted ?? []) {
+    addedAt.set(download.magnet, download.addedAt)
+  }
+
+  const lastStates = new Map<string, DownloadSnapshot["state"]>()
+  const tick = () => {
+    const next = props.engine.snapshots()
+    setSnapshots(next)
+    let changed = false
+    for (const snapshot of next) {
+      if (lastStates.get(snapshot.key) !== snapshot.state) {
+        lastStates.set(snapshot.key, snapshot.state)
+        changed = true
+      }
+    }
+    if (changed) persistNow()
+  }
   const interval = setInterval(tick, 1_000)
   onCleanup(() => clearInterval(interval))
-
-  const addedAt = new Map<string, number>()
 
   const persistNow = () => {
     const snaps = props.engine.snapshots()
@@ -89,4 +105,9 @@ export function useDownloads(): DownloadsStore {
   const store = useContext(DownloadsContext)
   if (store === undefined) throw new Error("useDownloads must be used inside DownloadsProvider")
   return store
+}
+
+// For chrome (footer) that renders in test harnesses without the full provider tree.
+export function useDownloadsOptional(): DownloadsStore | undefined {
+  return useContext(DownloadsContext)
 }

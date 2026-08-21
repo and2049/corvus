@@ -1,14 +1,19 @@
-import { Effect, Stream, pipe } from "effect"
-import type { Provider, TorrentResult } from "./provider"
+import { Duration, Effect, Stream, pipe } from "effect"
+import { ProviderError, type Provider, type TorrentResult } from "./provider"
 
 export type SearchEvent =
   | { readonly type: "result"; readonly result: TorrentResult }
   | { readonly type: "provider-done"; readonly provider: string }
   | { readonly type: "provider-error"; readonly provider: string; readonly message: string }
 
-const providerEvents = (provider: Provider, query: string): Stream.Stream<SearchEvent> =>
+const providerEvents = (provider: Provider, query: string, timeoutMs?: number): Stream.Stream<SearchEvent> =>
   pipe(
-    provider.search(query),
+    timeoutMs === undefined || timeoutMs <= 0
+      ? provider.search(query)
+      : Effect.timeoutFail(provider.search(query), {
+          duration: Duration.millis(timeoutMs),
+          onTimeout: () => new ProviderError({ provider: provider.name, message: `timed out after ${timeoutMs}ms` }),
+        }),
     Effect.map((results): Stream.Stream<SearchEvent> =>
       Stream.fromIterable(
         results.map((result): SearchEvent => ({ type: "result", result })),
@@ -38,9 +43,13 @@ const providerEvents = (provider: Provider, query: string): Stream.Stream<Search
     Stream.unwrap,
   )
 
-export function searchAll(providers: readonly Provider[], query: string): Stream.Stream<SearchEvent> {
+export function searchAll(
+  providers: readonly Provider[],
+  query: string,
+  timeoutMs?: number,
+): Stream.Stream<SearchEvent> {
   if (providers.length === 0) return Stream.empty
-  return Stream.mergeAll(providers.map((provider) => providerEvents(provider, query)), {
+  return Stream.mergeAll(providers.map((provider) => providerEvents(provider, query, timeoutMs)), {
     concurrency: "unbounded",
   })
 }

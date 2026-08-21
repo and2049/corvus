@@ -41,20 +41,58 @@ export function setFetchProxy(url: string | undefined): void {
   proxyUrl = url?.trim() || undefined
 }
 
+export interface HostCredential {
+  readonly cookie: string
+  readonly userAgent?: string
+}
+
+const cookieJar = new Map<string, HostCredential>()
+
+function hostKey(hostOrUrl: string): string {
+  const trimmed = hostOrUrl.trim().toLowerCase()
+  if (trimmed === "") return ""
+  try {
+    return new URL(trimmed.includes("://") ? trimmed : `https://${trimmed}`).host
+  } catch {
+    return trimmed.replace(/^.*:\/\//, "").replace(/[/?#].*$/, "")
+  }
+}
+
+// User-solved Cloudflare cookies keyed by host (cf_clearance is host+UA+IP bound,
+// so the browser's exact User-Agent must ride along with the cookie).
+export function setFetchCookies(entries: Readonly<Record<string, HostCredential>> | undefined): void {
+  cookieJar.clear()
+  if (entries === undefined) return
+  for (const [host, credential] of Object.entries(entries)) {
+    const key = hostKey(host)
+    if (key === "" || credential.cookie.trim() === "") continue
+    cookieJar.set(key, credential)
+  }
+}
+
 export async function fetchText(url: string, opts: FetchTextOptions = {}): Promise<string> {
   const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS
   const maxBytes = opts.maxBytes ?? MAX_RESPONSE_BYTES
+  const host = new URL(url).host
+  const credential = cookieJar.get(host.toLowerCase())
+  const headers: Record<string, string> = {
+    "user-agent": credential?.userAgent?.trim() || USER_AGENT,
+    accept: "*/*",
+  }
+  if (credential !== undefined) headers["cookie"] = credential.cookie
   const res = await fetch(url, {
-    headers: { "user-agent": USER_AGENT, accept: "*/*" },
+    headers,
     redirect: "follow",
     signal: AbortSignal.timeout(timeoutMs),
     ...(proxyUrl !== undefined ? { proxy: proxyUrl } : {}),
   })
-  const host = new URL(url).host
   if (res.status === 403 || res.status === 429 || res.status === 503) {
-    throw new Error(`blocked by ${host} (HTTP ${res.status})`)
+    await res.body?.cancel()
+    const stale = credential !== undefined ? " (cookie may be expired - re-solve in your browser)" : ""
+    throw new Error(`blocked by ${host} (HTTP ${res.status})${stale}`)
   }
   if (!res.ok) {
+    await res.body?.cancel()
     throw new Error(`HTTP ${res.status} from ${host}`)
   }
   const reader = res.body?.getReader()

@@ -1,46 +1,60 @@
 import { type InputRenderable, TextAttributes } from "@opentui/core"
 import { useKeyboard } from "@opentui/solid"
 import { onMount } from "solid-js"
+import { HRule } from "../component/hrule"
 import { Logo } from "../component/logo"
+import { useShell, type Hint } from "../context/shell"
 import { theme } from "../theme"
+
+const HOME_HINTS: readonly Hint[] = [
+  { key: "enter", label: "search" },
+  { key: "ctrl+g", label: "settings" },
+  { key: "ctrl+f", label: "sources" },
+  { key: "esc", label: "quit" },
+]
 
 export function Home(props: {
   onSubmit: (query: string) => void
   inputRef?: (el: InputRenderable) => void
+  onExit?: () => void
 }) {
+  const shell = useShell()
   let input: InputRenderable | undefined
-  onMount(() => input?.focus())
+  onMount(() => {
+    shell.setHints(HOME_HINTS)
+    input?.focus()
+  })
   useKeyboard((key) => {
-    if (key.name === "escape") process.exit(0)
+    if (key.name === "escape") props.onExit?.()
   })
   return (
-    <box flexDirection="column" width="100%" height="100%" paddingTop={1} paddingLeft={2}>
+    <box flexDirection="column" flexGrow={1} minHeight={0}>
       <Logo />
       <box flexDirection="row" gap={1} paddingTop={1}>
         <text fg={theme.accent} attributes={TextAttributes.BOLD}>
           corvus
         </text>
-        <text fg={theme.dim}>v0.1.0</text>
       </box>
-      <box flexDirection="row" gap={1} paddingTop={1}>
-        <text fg={theme.subtle}>search</text>
-        <input
-          ref={(el: InputRenderable) => {
-            input = el
-            props.inputRef?.(el)
-          }}
-          flexGrow={1}
-          onSubmit={(value: unknown) => props.onSubmit(String(value))}
-          placeholder="query..."
-          placeholderColor={theme.dim}
-          textColor={theme.text}
-          focusedTextColor={theme.text}
-          cursorColor={theme.accent}
-        />
+      <box flexDirection="column" paddingTop={1}>
+        <HRule />
+        <box flexDirection="row" gap={1}>
+          <text fg={theme.muted}>search</text>
+          <input
+            ref={(el: InputRenderable) => {
+              input = el
+              props.inputRef?.(el)
+            }}
+            flexGrow={1}
+            onSubmit={(value: unknown) => props.onSubmit(String(value))}
+            placeholder="query..."
+            placeholderColor={theme.dim}
+            textColor={theme.text}
+            focusedTextColor={theme.text}
+            cursorColor={theme.accent}
+          />
+        </box>
+        <HRule />
       </box>
-      <text fg={theme.dim} paddingTop={2}>
-        enter search · esc quit
-      </text>
     </box>
   )
 }

@@ -1,8 +1,13 @@
 export {
   configDir,
   configPath,
+  deepMerge,
   defaultConfig,
   loadConfig,
+  saveConfig,
+  type CloudflareConfig,
+  type CloudflareCredential,
+  type ConfigPatch,
   type CorvusConfig,
   type ProviderConfig,
   type ProvidersConfig,

@@ -61,8 +61,9 @@ export class Yts implements Provider {
   }
 
   search(query: string): Effect.Effect<readonly TorrentResult[], ProviderError> {
-    if (this.bases.length === 0) return Effect.succeed([])
-    return Effect.firstSuccessOf(this.orderedBases().map((base) => this.searchBase(base, query)))
+    const q = query.trim()
+    if (q === "" || this.bases.length === 0) return Effect.succeed([])
+    return Effect.firstSuccessOf(this.orderedBases().map((base) => this.searchBase(base, q)))
   }
 
   private readonly searchBase = (base: string, query: string): Effect.Effect<readonly TorrentResult[], ProviderError> =>

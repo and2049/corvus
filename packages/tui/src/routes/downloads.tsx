@@ -1,9 +1,23 @@
-import { useKeyboard, useTerminalDimensions } from "@opentui/solid"
-import { createMemo, createSignal, For, Show } from "solid-js"
+import type { ScrollBoxRenderable } from "@opentui/core"
+import { useKeyboard } from "@opentui/solid"
+import { createEffect, createMemo, createSignal, For, Show } from "solid-js"
 import type { DownloadSnapshot } from "@corvus/core"
 import { formatBytes } from "@corvus/providers"
 import { useDownloads } from "../context/downloads"
+import { useShell, type Hint } from "../context/shell"
 import { theme } from "../theme"
+
+const LIST_HINTS: readonly Hint[] = [
+  { key: "enter", label: "files" },
+  { key: "p", label: "pause/resume" },
+  { key: "r", label: "remove" },
+  { key: "esc", label: "back" },
+]
+
+const FILES_HINTS: readonly Hint[] = [
+  { key: "space", label: "toggle file" },
+  { key: "esc", label: "back" },
+]
 
 const BAR_WIDTH = 20
 const BAR_GLYPHS = [" ", "▏", "▎", "▎", "▍", "▍", "▌", "▋", "▋", "▊", "▊", "▉"]
@@ -30,9 +44,9 @@ function formatEta(seconds: number | undefined): string {
 const stateColor = (snapshot: DownloadSnapshot): string => {
   switch (snapshot.state) {
     case "done":
-      return theme.seedGood
+      return theme.success
     case "error":
-      return theme.seedLow
+      return theme.error
     case "downloading":
       return theme.accent
     default:
@@ -40,23 +54,33 @@ const stateColor = (snapshot: DownloadSnapshot): string => {
   }
 }
 
+// Keep the cursor row inside the scrollbox viewport.
+function followCursor(scroll: ScrollBoxRenderable | undefined, index: number): void {
+  if (scroll === undefined) return
+  const target = scroll.getChildren()[index]
+  if (target === undefined) return
+  const y = target.y - scroll.y
+  if (y >= scroll.height) scroll.scrollBy(y - scroll.height + 1)
+  else if (y < 0) scroll.scrollBy(y)
+}
+
 export function Downloads(props: { onBack: () => void }) {
   const downloads = useDownloads()
+  const shell = useShell()
   const [cursor, setCursor] = createSignal(0)
   const [fileCursor, setFileCursor] = createSignal(0)
   const [openKey, setOpenKey] = createSignal<string | undefined>(undefined)
-  const dims = useTerminalDimensions()
+  let scroll: ScrollBoxRenderable | undefined
 
   const snapshots = createMemo(() => downloads.snapshots())
   const openSnapshot = createMemo(() => snapshots().find((s) => s.key === openKey()))
-  const visibleCount = createMemo(() => Math.max(dims().height - 6, 1))
-  const offset = createMemo(() => {
-    const total = snapshots().length
-    if (total <= visibleCount()) return 0
-    const half = Math.floor(visibleCount() / 2)
-    return Math.max(0, Math.min(cursor() - half, total - visibleCount()))
+
+  createEffect(() => {
+    void snapshots().length
+    followCursor(scroll, cursor())
   })
-  const rows = createMemo(() => snapshots().slice(offset(), offset() + visibleCount()))
+
+  createEffect(() => shell.setHints(openKey() === undefined ? LIST_HINTS : FILES_HINTS))
 
   useKeyboard((key) => {
     if (key.name === "escape") {
@@ -112,41 +136,68 @@ export function Downloads(props: { onBack: () => void }) {
 
   return (
     <Show when={openKey() === undefined} fallback={<FilesView snapshot={openSnapshot()} cursor={fileCursor} />}>
-      <box flexDirection="column" width="100%" height="100%" paddingLeft={2} paddingRight={1}>
-      <box flexDirection="row" gap={1}>
-        <text fg={theme.subtle}>downloads</text>
-        <text fg={theme.dim}>{snapshots().length}</text>
-      </box>
-      <box flexDirection="column" paddingTop={1}>
-        <For each={rows()}>
-          {(snapshot, index) => {
-            const selected = createMemo(() => offset() + index() === cursor())
-            return (
-              <box flexDirection="row" gap={1}>
-                <text fg={selected() ? theme.accent : "transparent"}>{selected() ? ">" : " "}</text>
-                <text fg={stateColor(snapshot)}>{progressBar(snapshot.progress)}</text>
-                <text fg={theme.dim}>{String(Math.round(snapshot.progress * 100)).padStart(3)}%</text>
-                <text fg={theme.text} truncate flexGrow={1} wrapMode="none">
-                  {truncate(snapshot.name, 200)}
-                </text>
-                <Show when={snapshot.state === "downloading" || snapshot.state === "paused"}>
-                  <text fg={theme.subtle}>{formatBytes(snapshot.downloadSpeed)}/s</text>
-                  <text fg={theme.dim}>{formatEta(snapshot.etaSeconds)}</text>
-                </Show>
-                <Show when={snapshot.state !== "downloading" && snapshot.state !== "paused"}>
-                  <text fg={stateColor(snapshot)}>{snapshot.state}</text>
-                </Show>
-              </box>
-            )
-          }}
-        </For>
-        <Show when={snapshots().length === 0}>
-          <text fg={theme.dim}>no downloads</text>
-        </Show>
-      </box>
-      <text fg={theme.dim} marginTop="auto">
-        enter files · p pause/resume · r remove · up/down select · esc back
-      </text>
+      <box flexDirection="column" flexGrow={1} minHeight={0} width="100%">
+        <box flexDirection="row" gap={1} flexShrink={0}>
+          <text fg={theme.muted}>downloads</text>
+          <text fg={theme.dim}>{snapshots().length}</text>
+        </box>
+        <box flexGrow={1} minHeight={0} flexDirection="column" paddingTop={1}>
+          <scrollbox
+            ref={(el: ScrollBoxRenderable) => (scroll = el)}
+            flexGrow={1}
+            viewportOptions={{ paddingRight: 1 }}
+          >
+            <For each={snapshots()}>
+              {(snapshot, index) => {
+                const selected = createMemo(() => index() === cursor())
+                return (
+                  <box
+                    flexDirection="row"
+                    gap={1}
+                    flexShrink={0}
+                    width="100%"
+                    height={1}
+                    backgroundColor={selected() ? theme.selectedBg : undefined}
+                  >
+                    <text flexShrink={0} fg={selected() ? theme.accent : "transparent"}>
+                      {selected() ? "›" : " "}
+                    </text>
+                    <text flexShrink={0} fg={stateColor(snapshot)}>
+                      {progressBar(snapshot.progress)}
+                    </text>
+                    <text flexShrink={0} fg={theme.dim}>
+                      {String(Math.round(snapshot.progress * 100)).padStart(3)}%
+                    </text>
+                    <text
+                      fg={selected() ? theme.accent : theme.text}
+                      truncate
+                      flexGrow={1}
+                      flexShrink={1}
+                      minWidth={0}
+                      wrapMode="none"
+                    >
+                      {snapshot.name}
+                    </text>
+                    <Show when={snapshot.state === "downloading" || snapshot.state === "paused"}>
+                      <text flexShrink={0} fg={theme.muted}>{formatBytes(snapshot.downloadSpeed)}/s</text>
+                      <text flexShrink={0} fg={theme.dim}>{formatEta(snapshot.etaSeconds)}</text>
+                    </Show>
+                    <Show when={snapshot.state !== "downloading" && snapshot.state !== "paused"}>
+                      <text flexShrink={0} fg={stateColor(snapshot)}>
+                        {snapshot.state === "error" && snapshot.error !== undefined
+                          ? `error: ${truncate(snapshot.error, 60)}`
+                          : snapshot.state}
+                      </text>
+                    </Show>
+                  </box>
+                )
+              }}
+            </For>
+          </scrollbox>
+          <Show when={snapshots().length === 0}>
+            <text fg={theme.dim}>no downloads</text>
+          </Show>
+        </box>
       </box>
     </Show>
   )
@@ -154,38 +205,69 @@ export function Downloads(props: { onBack: () => void }) {
 
 function FilesView(props: { snapshot: DownloadSnapshot | undefined; cursor: () => number }) {
   const snapshot = () => props.snapshot
+  let scroll: ScrollBoxRenderable | undefined
+
+  createEffect(() => {
+    void (snapshot()?.files.length ?? 0)
+    followCursor(scroll, props.cursor())
+  })
+
   return (
-    <box flexDirection="column" width="100%" height="100%" paddingLeft={2} paddingRight={1}>
-      <text fg={theme.subtle} wrapMode="none" truncate>
+    <box flexDirection="column" flexGrow={1} minHeight={0} width="100%">
+      <text fg={theme.muted} wrapMode="none" truncate flexShrink={0}>
         files: {snapshot()?.name ?? ""}
       </text>
-      <box flexDirection="column" paddingTop={1}>
-        <For each={snapshot()?.files ?? []}>
-          {(file, index) => {
-            const selected = createMemo(() => index() === props.cursor())
-            return (
-              <box flexDirection="row" gap={1}>
-                <text fg={selected() ? theme.accent : "transparent"}>{selected() ? ">" : " "}</text>
-                <text fg={file.selected ? theme.seedGood : theme.dim}>{file.selected ? "[x]" : "[ ]"}</text>
-                <text fg={selected() ? theme.text : theme.subtle} truncate flexGrow={1} wrapMode="none">
-                  {truncate(file.path, 200)}
-                </text>
-                <text fg={theme.dim}>{formatBytes(file.length).padStart(9)}</text>
-              </box>
-            )
-          }}
-        </For>
+      <box flexGrow={1} minHeight={0} flexDirection="column" paddingTop={1}>
+        <scrollbox
+          ref={(el: ScrollBoxRenderable) => (scroll = el)}
+          flexGrow={1}
+          viewportOptions={{ paddingRight: 1 }}
+        >
+          <For each={snapshot()?.files ?? []}>
+            {(file, index) => {
+              const selected = createMemo(() => index() === props.cursor())
+              return (
+                <box
+                  flexDirection="row"
+                  gap={1}
+                  flexShrink={0}
+                  width="100%"
+                  height={1}
+                  backgroundColor={selected() ? theme.selectedBg : undefined}
+                >
+                  <text flexShrink={0} fg={selected() ? theme.accent : "transparent"}>
+                    {selected() ? "›" : " "}
+                  </text>
+                  <text flexShrink={0} fg={file.selected ? theme.success : theme.dim}>
+                    {file.selected ? "[x]" : "[ ]"}
+                  </text>
+                  <text
+                    fg={selected() ? theme.text : theme.muted}
+                    truncate
+                    flexGrow={1}
+                    flexShrink={1}
+                    minWidth={0}
+                    wrapMode="none"
+                  >
+                    {file.path}
+                  </text>
+                  <text flexShrink={0} fg={theme.dim}>
+                    {formatBytes(file.length).padStart(9)}
+                  </text>
+                </box>
+              )
+            }}
+          </For>
+        </scrollbox>
         <Show when={(snapshot()?.files.length ?? 0) === 0}>
           <text fg={theme.dim}>no file metadata yet</text>
         </Show>
       </box>
-      <text fg={theme.dim} marginTop="auto">
-        space toggle file · esc back
-      </text>
     </box>
   )
 }
 
-function truncate(text: string, maxWidth: number): string {
-  return text.length <= maxWidth ? text : `${text.slice(0, Math.max(maxWidth - 3, 1))}...`
+function truncate(text: string | undefined, maxWidth: number): string {
+  const value = text ?? ""
+  return value.length <= maxWidth ? value : `${value.slice(0, Math.max(maxWidth - 3, 1))}...`
 }

@@ -51,6 +51,7 @@ export class SoulseekClient {
   private connectToPeerWaiters = new Set<(message: ConnectToPeerMessage) => void>()
   private activeSearches = new Map<number, PendingSearch>()
   private options: SoulseekOptions | undefined
+  private connecting: Promise<LoginResponse> | undefined
 
   get connectionState(): ConnectionState {
     return this.state
@@ -58,6 +59,16 @@ export class SoulseekClient {
 
   async connect(options: SoulseekOptions): Promise<LoginResponse> {
     if (this.state === "logged-in") return { success: true }
+    if (this.connecting !== undefined) return this.connecting
+    this.connecting = this.doConnect(options)
+    try {
+      return await this.connecting
+    } finally {
+      this.connecting = undefined
+    }
+  }
+
+  private async doConnect(options: SoulseekOptions): Promise<LoginResponse> {
     this.options = options
     this.state = "connecting"
     try {

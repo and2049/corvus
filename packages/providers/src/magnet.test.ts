@@ -30,6 +30,12 @@ describe("infoHashFromMagnet", () => {
   test("returns undefined for magnets without btih", () => {
     expect(infoHashFromMagnet("magnet:?dn=foo")).toBeUndefined()
   })
+
+  test("treats a 40-char hex hash as hex even when its prefix looks like base32", () => {
+    // first 32 chars are all in the base32 alphabet [a-f2-7]; must not be base32-decoded
+    const hash = "abcdef2345672345672345672345672345672345"
+    expect(infoHashFromMagnet(`magnet:?xt=urn:btih:${hash}`)).toBe(hash)
+  })
 })
 
 describe("parseMagnet", () => {
