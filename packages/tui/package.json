@@ -1,0 +1,14 @@
+{
+  "name": "@corvus/tui",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@corvus/core": "workspace:*",
+    "@corvus/providers": "workspace:*",
+    "@opentui/core": "0.5.4",
+    "@opentui/solid": "0.5.4",
+    "effect": "^3.16.0",
+    "solid-js": "^1.9.10"
+  }
+}

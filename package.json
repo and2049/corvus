@@ -1,0 +1,16 @@
+{
+  "name": "corvus",
+  "private": true,
+  "type": "module",
+  "workspaces": ["packages/*"],
+  "scripts": {
+    "dev": "cd packages/tui && bun src/main.tsx",
+    "test": "bun test packages/core packages/providers && cd packages/tui && bun test",
+    "typecheck": "tsc -p packages/providers/tsconfig.json --noEmit && tsc -p packages/core/tsconfig.json --noEmit && tsc -p packages/tui/tsconfig.json --noEmit"
+  },
+  "devDependencies": {
+    "@tsconfig/bun": "^1.0.8",
+    "@types/bun": "^1.2.0",
+    "typescript": "^5.8.0"
+  }
+}
