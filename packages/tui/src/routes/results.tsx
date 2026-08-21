@@ -66,9 +66,9 @@ export function Results(props: { onBack: () => void; onDownload: () => void }) {
     if (selected === undefined) return
     setPreview(undefined)
     setAdding(true)
-    await downloads.add(selected, search.providers())
+    const added = await downloads.add(selected, search.providers())
     setAdding(false)
-    props.onDownload()
+    if (added) props.onDownload()
   }
 
   return (
@@ -172,6 +172,9 @@ export function PreviewDialog(props: { result: TorrentResult }) {
           <text fg={theme.seedGood}>trusted</text>
         </Show>
       </box>
+      <Show when={r().magnet === ""}>
+        <text fg={theme.seedMid}>soulseek file - transfer support coming soon</text>
+      </Show>
       <text fg={theme.dim} paddingTop={1}>
         enter download · esc cancel
       </text>

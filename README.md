@@ -31,6 +31,11 @@ providers:
   nyaa: { enabled: true }          # baseUrl override supported
   eztv: { enabled: true }
   x1337: { enabled: true }         # baseUrls: [mirror, ...] override supported
+  soulseek:                        # search-only for now; needs an account (new
+    enabled: false                 # username/password auto-registers on login)
+    username: ""
+    password: ""
+    listenPort: 2234               # must be reachable inbound for results (forward it)
   my-indexer:                      # any custom name; type: rss for user-added indexers
     type: rss
     searchUrl: "https://indexer.example/api?t=search&q={query}"

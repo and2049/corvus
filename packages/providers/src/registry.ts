@@ -5,6 +5,9 @@ export interface SourceOptions {
   readonly baseUrl?: string
   readonly baseUrls?: readonly string[]
   readonly searchUrl?: string
+  readonly username?: string
+  readonly password?: string
+  readonly listenPort?: number
 }
 
 export type SourceFactory = (options: SourceOptions) => Provider | readonly Provider[]
@@ -20,9 +23,12 @@ export interface ProviderEntry {
   readonly baseUrl?: string
   readonly baseUrls?: readonly string[]
   readonly searchUrl?: string
+  readonly username?: string
+  readonly password?: string
+  readonly listenPort?: number
 }
 
-const BUILTIN_ORDER = ["knaben", "yts", "nyaa", "eztv", "x1337"] as const
+const BUILTIN_ORDER = ["knaben", "yts", "nyaa", "eztv", "x1337", "soulseek"] as const
 
 function isBuiltin(name: string): boolean {
   return (BUILTIN_ORDER as readonly string[]).includes(name)

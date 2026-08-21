@@ -5,7 +5,7 @@ import { infoHashFromMagnet, type Provider, type TorrentResult } from "@corvus/p
 
 export interface DownloadsStore {
   readonly snapshots: () => readonly DownloadSnapshot[]
-  readonly add: (result: TorrentResult, providers: readonly Provider[]) => Promise<void>
+  readonly add: (result: TorrentResult, providers: readonly Provider[]) => Promise<boolean>
   readonly remove: (key: string) => Promise<void>
   readonly togglePause: (key: string) => void
   readonly toggleFile: (key: string, index: number) => void
@@ -42,21 +42,22 @@ export function DownloadsProvider(props: {
     )
   }
 
-  const add = async (result: TorrentResult, providers: readonly Provider[]) => {
+  const add = async (result: TorrentResult, providers: readonly Provider[]): Promise<boolean> => {
     let magnet = result.magnet
     if (magnet === "") {
       const provider = providers.find((p) => p.name === result.provider)
-      if (provider?.resolveMagnet === undefined) return
+      if (provider?.resolveMagnet === undefined) return false
       try {
         magnet = await Effect.runPromise(provider.resolveMagnet(result))
       } catch {
-        return
+        return false
       }
     }
     if (!addedAt.has(magnet)) addedAt.set(magnet, Date.now())
     props.engine.add(magnet)
     tick()
     persistNow()
+    return true
   }
 
   const remove = async (key: string) => {

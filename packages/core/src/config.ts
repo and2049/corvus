@@ -9,6 +9,9 @@ export interface ProviderConfig {
   readonly baseUrl?: string
   readonly baseUrls?: readonly string[]
   readonly searchUrl?: string
+  readonly username?: string
+  readonly password?: string
+  readonly listenPort?: number
 }
 
 export type ProvidersConfig = Readonly<Record<string, ProviderConfig | undefined>>
@@ -34,6 +37,7 @@ export function defaultConfig(): CorvusConfig {
       nyaa: { enabled: true },
       eztv: { enabled: true },
       x1337: { enabled: true },
+      soulseek: { enabled: false, username: "", password: "" },
     },
   }
 }
