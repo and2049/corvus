@@ -4,6 +4,6 @@ export {
   defaultConfig,
   loadConfig,
   type CorvusConfig,
+  type ProviderConfig,
   type ProvidersConfig,
-  type SourceConfig,
 } from "./config"

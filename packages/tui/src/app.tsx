@@ -3,11 +3,14 @@ import { SearchProvider, useSearch } from "./context/search"
 import { Home } from "./routes/home"
 import { Results } from "./routes/results"
 import type { CorvusConfig } from "@corvus/core"
-import { createProviders } from "@corvus/providers"
+import { ContentFilter, createProviders } from "@corvus/providers"
 
 export function App(props: { config: CorvusConfig }) {
   return (
-    <SearchProvider providers={createProviders(props.config.providers)}>
+    <SearchProvider
+      providers={createProviders(props.config.providers)}
+      filter={new ContentFilter(props.config.hideNSFW)}
+    >
       <Router />
     </SearchProvider>
   )

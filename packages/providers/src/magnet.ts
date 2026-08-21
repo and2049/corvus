@@ -55,3 +55,79 @@ export function infoHashFromMagnet(magnet: string): string | undefined {
   if (raw.length === 40) return raw.toLowerCase()
   return base32ToHex(raw)
 }
+
+export interface ParsedMagnet {
+  readonly infoHash: string
+  readonly displayName: string
+  readonly trackers: readonly string[]
+  readonly params: readonly (readonly [string, string])[]
+}
+
+export function parseMagnet(magnet: string): ParsedMagnet | undefined {
+  if (!magnet.startsWith("magnet:?")) return undefined
+  let infoHash = ""
+  let displayName = ""
+  const trackers: string[] = []
+  const params: [string, string][] = []
+  for (const [key, value] of new URLSearchParams(magnet.slice("magnet:?".length))) {
+    if (key === "xt" && infoHash === "") {
+      const match = /^urn:btih:(.+)$/i.exec(value)
+      if (match) {
+        const normalized = normalizeBtih(match[1]!)
+        if (normalized === undefined) return undefined
+        infoHash = normalized
+        continue
+      }
+    }
+    if (key === "dn") {
+      displayName = value
+    } else if (key === "tr") {
+      trackers.push(value)
+    } else {
+      params.push([key, value])
+    }
+  }
+  if (infoHash === "") return undefined
+  return { infoHash, displayName, trackers, params }
+}
+
+function normalizeBtih(raw: string): string | undefined {
+  if (raw.length === 40 && /^[A-Fa-f0-9]{40}$/.test(raw)) return raw.toLowerCase()
+  if (raw.length === 32) return base32ToHex(raw)
+  return undefined
+}
+
+const MAX_MERGED_TRACKERS = 64
+
+function trackerKey(tracker: string): string {
+  const trimmed = tracker.trim()
+  return trimmed.toLowerCase().replace(/\/+$/, "")
+}
+
+export function unionTrackers(a: readonly string[], b: readonly string[]): string[] {
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const list of [a, b]) {
+    for (const tracker of list) {
+      const key = trackerKey(tracker)
+      if (key === "" || seen.has(key)) continue
+      seen.add(key)
+      out.push(tracker.trim())
+    }
+  }
+  out.sort()
+  return out.length > MAX_MERGED_TRACKERS ? out.slice(0, MAX_MERGED_TRACKERS) : out
+}
+
+export function unionMagnet(keepMagnet: string, otherMagnet: string): string {
+  const keep = parseMagnet(keepMagnet)
+  const other = parseMagnet(otherMagnet)
+  if (!keep || !other) return keepMagnet
+  const merged = unionTrackers(keep.trackers, other.trackers)
+  if (merged.length === unionTrackers(keep.trackers, []).length) return keepMagnet
+  let magnet = `magnet:?xt=urn:btih:${keep.infoHash}`
+  if (keep.displayName !== "") magnet += `&dn=${encodeURIComponent(keep.displayName)}`
+  for (const [key, value] of keep.params) magnet += `&${key}=${encodeURIComponent(value)}`
+  for (const tracker of merged) magnet += `&tr=${encodeURIComponent(tracker)}`
+  return magnet
+}

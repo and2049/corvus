@@ -31,9 +31,46 @@ describe("mergeInto", () => {
     mergeInto(map, b)
     expect(map.size).toBe(1)
     const merged = [...map.values()][0]!
-    expect(merged.provider).toBe("yts")
+    expect(merged.provider).toBe("knaben")
     expect(merged.seeders).toBe(30)
-    expect(merged.alsoOn).toEqual(["knaben"])
+    expect(merged.alsoOn).toEqual(["yts"])
+  })
+
+  test("keeper choice is independent of arrival order", () => {
+    const mapA = new Map<string, TorrentResult>()
+    const mapB = new Map<string, TorrentResult>()
+    const hash = "ab".repeat(20)
+    const a = makeResult({ title: "A long title", magnet: `magnet:?xt=urn:btih:${hash}`, provider: "yts", seeders: 10 })
+    const b = makeResult({ title: "B", magnet: `magnet:?xt=urn:btih:${hash}`, provider: "knaben", seeders: 10 })
+    mergeInto(mapA, a)
+    mergeInto(mapA, b)
+    mergeInto(mapB, b)
+    mergeInto(mapB, a)
+    expect([...mapA.values()][0]!.provider).toBe([...mapB.values()][0]!.provider)
+  })
+
+  test("merging unions trackers into the magnet", () => {
+    const map = new Map<string, TorrentResult>()
+    const hash = "ab".repeat(20)
+    mergeInto(
+      map,
+      makeResult({
+        title: "A",
+        magnet: `magnet:?xt=urn:btih:${hash}&tr=${encodeURIComponent("udp://a.example/announce")}`,
+        provider: "yts",
+      }),
+    )
+    mergeInto(
+      map,
+      makeResult({
+        title: "A",
+        magnet: `magnet:?xt=urn:btih:${hash}&tr=${encodeURIComponent("udp://b.example/announce")}`,
+        provider: "knaben",
+      }),
+    )
+    const merged = [...map.values()][0]!
+    expect(merged.magnet).toContain("udp%3A%2F%2Fa.example%2Fannounce")
+    expect(merged.magnet).toContain("udp%3A%2F%2Fb.example%2Fannounce")
   })
 
   test("same infohash case variants dedupe", () => {

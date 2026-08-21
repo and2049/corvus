@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { buildMagnet, DEFAULT_TRACKERS, infoHashFromMagnet } from "./magnet"
+import { buildMagnet, DEFAULT_TRACKERS, infoHashFromMagnet, parseMagnet, unionMagnet } from "./magnet"
 
 describe("buildMagnet", () => {
   test("builds a magnet with hash, name and trackers", () => {
@@ -29,5 +29,45 @@ describe("infoHashFromMagnet", () => {
 
   test("returns undefined for magnets without btih", () => {
     expect(infoHashFromMagnet("magnet:?dn=foo")).toBeUndefined()
+  })
+})
+
+describe("parseMagnet", () => {
+  test("extracts hash, name, trackers and extra params", () => {
+    const parsed = parseMagnet(
+      "magnet:?xt=urn:btih:ABCDEF0123456789ABCDEF0123456789ABCDEF01&dn=Test&ws=http%3A%2F%2Fx.example%2Ffile&tr=udp%3A%2F%2Fa.example%2Fannounce&tr=udp%3A%2F%2Fb.example%2Fannounce",
+    )
+    expect(parsed?.infoHash).toBe("abcdef0123456789abcdef0123456789abcdef01")
+    expect(parsed?.displayName).toBe("Test")
+    expect(parsed?.trackers).toEqual(["udp://a.example/announce", "udp://b.example/announce"])
+    expect(parsed?.params).toEqual([["ws", "http://x.example/file"]])
+  })
+
+  test("returns undefined for non-magnets and magnets without xt", () => {
+    expect(parseMagnet("http://example.com")).toBeUndefined()
+    expect(parseMagnet("magnet:?dn=only")).toBeUndefined()
+  })
+})
+
+describe("unionMagnet", () => {
+  const hash = "ab".repeat(20)
+  const withTracker = (tr: string): string => `magnet:?xt=urn:btih:${hash}&dn=Name&tr=${encodeURIComponent(tr)}`
+
+  test("unions trackers from both magnets", () => {
+    const merged = unionMagnet(withTracker("udp://a/announce"), withTracker("udp://b/announce"))
+    expect(merged).toContain("a%2Fannounce")
+    expect(merged).toContain("b%2Fannounce")
+    expect(merged).toContain("dn=Name")
+  })
+
+  test("keeps the magnet untouched when the other adds nothing", () => {
+    const keep = withTracker("udp://a/announce")
+    expect(unionMagnet(keep, withTracker("udp://a/announce/"))).toBe(keep)
+  })
+
+  test("returns keep unchanged when either side does not parse", () => {
+    const keep = withTracker("udp://a/announce")
+    expect(unionMagnet(keep, "not-a-magnet")).toBe(keep)
+    expect(unionMagnet("not-a-magnet", withTracker("udp://a/announce"))).toBe("not-a-magnet")
   })
 })

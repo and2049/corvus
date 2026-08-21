@@ -11,6 +11,7 @@ export interface TorrentResult {
   readonly category?: string
   readonly trusted: boolean
   readonly alsoOn: readonly string[]
+  readonly detailUrl?: string
 }
 
 export class ProviderError extends Data.TaggedError("ProviderError")<{
@@ -21,6 +22,7 @@ export class ProviderError extends Data.TaggedError("ProviderError")<{
 export interface Provider {
   readonly name: string
   search(query: string): Effect.Effect<readonly TorrentResult[], ProviderError>
+  resolveMagnet?(result: TorrentResult): Effect.Effect<string, ProviderError>
 }
 
 const DEFAULT_TIMEOUT_MS = 15_000
@@ -91,4 +93,24 @@ export function formatBytes(bytes: number): string {
 export function atoiDefault(input: string): number {
   const parsed = Number.parseInt(input.replace(/[^\d-]/g, ""), 10)
   return Number.isFinite(parsed) ? parsed : 0
+}
+
+export function humanSizeBinary(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes < 0) return "0 B"
+  const units = ["B", "KiB", "MiB", "GiB", "TiB", "PiB"]
+  let unit = 0
+  let value = bytes
+  while (value >= 1024 && unit < units.length - 1) {
+    value /= 1024
+    unit += 1
+  }
+  return unit === 0 ? `${Math.round(value)} B` : `${value.toFixed(1)} ${units[unit]!}`
+}
+
+export function matchesQuery(title: string, query: string): boolean {
+  const lowerTitle = title.toLowerCase()
+  for (const token of query.toLowerCase().split(/\s+/)) {
+    if (token !== "" && !lowerTitle.includes(token)) return false
+  }
+  return true
 }

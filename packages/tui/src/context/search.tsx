@@ -1,6 +1,7 @@
 import { createContext, createSignal, useContext, type JSX } from "solid-js"
 import { Effect, Stream } from "effect"
 import {
+  ContentFilter,
   createProviders,
   mergeInto,
   searchAll,
@@ -25,7 +26,11 @@ export interface SearchStore {
 
 const SearchContext = createContext<SearchStore>()
 
-export function SearchProvider(props: { providers: readonly Provider[]; children: JSX.Element }) {
+export function SearchProvider(props: {
+  providers: readonly Provider[]
+  filter?: ContentFilter
+  children: JSX.Element
+}) {
   const [query, setQuery] = createSignal("")
   const [running, setRunning] = createSignal(false)
   const [results, setResults] = createSignal<readonly TorrentResult[]>([])
@@ -40,6 +45,7 @@ export function SearchProvider(props: { providers: readonly Provider[]; children
 
   const handleEvent = (event: SearchEvent) => {
     if (event.type === "result") {
+      if (props.filter !== undefined && !props.filter.allow(query(), event.result)) return
       mergeInto(resultsMap, event.result)
       publish()
       return

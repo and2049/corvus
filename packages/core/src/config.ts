@@ -3,20 +3,21 @@ import os from "node:os"
 import path from "node:path"
 import { parse } from "yaml"
 
-export interface SourceConfig {
+export interface ProviderConfig {
   readonly enabled?: boolean
+  readonly type?: string
   readonly baseUrl?: string
+  readonly baseUrls?: readonly string[]
+  readonly searchUrl?: string
 }
 
-export interface ProvidersConfig {
-  readonly yts?: SourceConfig
-  readonly knaben?: SourceConfig
-}
+export type ProvidersConfig = Readonly<Record<string, ProviderConfig | undefined>>
 
 export interface CorvusConfig {
   readonly downloadDir: string
   readonly seedAfterComplete: boolean
   readonly searchTimeoutMs: number
+  readonly hideNSFW: boolean
   readonly providers: ProvidersConfig
 }
 
@@ -25,9 +26,13 @@ export function defaultConfig(): CorvusConfig {
     downloadDir: path.join(os.homedir(), "Downloads", "corvus"),
     seedAfterComplete: false,
     searchTimeoutMs: 15_000,
+    hideNSFW: true,
     providers: {
-      yts: { enabled: true },
       knaben: { enabled: true },
+      yts: { enabled: true },
+      nyaa: { enabled: true },
+      eztv: { enabled: true },
+      x1337: { enabled: true },
     },
   }
 }
@@ -46,7 +51,7 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 
 function deepMerge<T>(base: T, patch: unknown): T {
   if (!isPlainObject(patch) || !isPlainObject(base)) {
-    return (patch === undefined ? base : (patch as T))
+    return patch === undefined ? base : (patch as T)
   }
   const out: Record<string, unknown> = { ...base }
   for (const [key, value] of Object.entries(patch)) {

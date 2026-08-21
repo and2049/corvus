@@ -1,15 +1,11 @@
 import type { Provider } from "./provider"
-import { Knaben } from "./sources/knaben"
-import { Yts } from "./sources/yts"
+import { createProviders as fromRegistry, type ProviderEntry } from "./registry"
+import { builtinSources } from "./sources"
 
-export interface ProviderOptions {
-  readonly yts?: { readonly enabled?: boolean; readonly baseUrl?: string }
-  readonly knaben?: { readonly enabled?: boolean; readonly baseUrl?: string }
+export function createProviders(
+  entries: Readonly<Record<string, ProviderEntry | undefined>>,
+): Provider[] {
+  return fromRegistry(entries, builtinSources)
 }
 
-export function createProviders(opts: ProviderOptions = {}): Provider[] {
-  const providers: Provider[] = []
-  if (opts.yts?.enabled !== false) providers.push(new Yts(opts.yts?.baseUrl))
-  if (opts.knaben?.enabled !== false) providers.push(new Knaben(opts.knaben?.baseUrl))
-  return providers
-}
+export { builtinSources }
