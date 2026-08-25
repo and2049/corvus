@@ -77,7 +77,29 @@ export function setFetchCookies(entries: Readonly<Record<string, HostCredential>
   }
 }
 
+// Connection-level failures (reset, refused, closed mid-flight) are worth one
+// retry: they fail fast, the requests are idempotent GETs, and flaky links
+// (VPN tunnels especially) drop connections in bursts. Timeouts are excluded —
+// retrying those would blow past the aggregator's per-provider deadline.
+const TRANSIENT_CODES = new Set(["ECONNRESET", "ECONNREFUSED", "EPIPE", "ConnectionClosed", "ConnectionRefused", "FailedToOpenSocket"])
+
+function isTransientNetworkError(error: unknown): boolean {
+  const code = (error as { code?: unknown } | null)?.code
+  if (typeof code === "string" && TRANSIENT_CODES.has(code)) return true
+  return error instanceof Error && /socket connection was closed|Unable to connect/i.test(error.message)
+}
+
 export async function fetchText(url: string, opts: FetchTextOptions = {}): Promise<string> {
+  try {
+    return await fetchTextOnce(url, opts)
+  } catch (error) {
+    if (!isTransientNetworkError(error)) throw error
+    await new Promise((resolve) => setTimeout(resolve, 300))
+    return fetchTextOnce(url, opts)
+  }
+}
+
+async function fetchTextOnce(url: string, opts: FetchTextOptions = {}): Promise<string> {
   const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS
   const maxBytes = opts.maxBytes ?? MAX_RESPONSE_BYTES
   const host = new URL(url).host
