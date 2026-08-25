@@ -4,6 +4,7 @@ import { defaultConfig } from "@corvus/core"
 import type { Engine } from "@corvus/core"
 import { infoHashFromMagnet } from "@corvus/providers"
 import { App } from "../app"
+import { CORVUS_VERSION } from "../version"
 
 function createFakeEngine() {
   const added: string[] = []
@@ -54,10 +55,10 @@ describe("App", () => {
     await t.flush()
     const frame = t.captureCharFrame()
     expect(frame).toContain("idle")
-    expect(frame).toContain("v0.1.0")
+    expect(frame).toContain(`v${CORVUS_VERSION}`)
     expect(frame).toContain("ctrl+g settings")
     expect(frame).toContain("ctrl+shift+c copy selection")
-    expect(frame.includes("corvus v0.1.0")).toBe(false)
+    expect(frame.includes(`corvus v${CORVUS_VERSION}`)).toBe(false)
     await t.renderer.destroy()
   })
 

@@ -6,8 +6,11 @@ import { useDownloadsOptional } from "../context/downloads"
 import { useSearchOptional } from "../context/search"
 import { useShell, type Route } from "../context/shell"
 import { theme } from "../theme"
+import { CORVUS_VERSION } from "../version"
 
-export const APP_VERSION = "0.1.0"
+// Re-exported so home.tsx keeps its existing import site. Value is "local" when
+// running from source; the real version is injected at build time (see version.ts).
+export const APP_VERSION = CORVUS_VERSION
 
 export function providerCounts(c: CorvusConfig | undefined): string {
   if (c === undefined) return ""

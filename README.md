@@ -2,6 +2,31 @@
 
 TUI torrent and media downloading client.
 
+## Install
+
+**macOS / Linux**
+
+```bash
+curl -fsSL https://github.com/and2049/corvus/releases/latest/download/install | bash
+```
+
+**Windows**
+
+```powershell
+irm https://github.com/and2049/corvus/releases/latest/download/install.ps1 | iex
+```
+
+This installs the `corvus` binary to `~/.corvus/bin` and adds it to your PATH. Then run `corvus`.
+
+Update to the latest release:
+
+```bash
+corvus upgrade            # latest
+corvus upgrade -v 0.1.0   # a specific version
+```
+
+Releases are published from git tags (`v*.*.*`). Running from source (`bun dev`) reports version `local`.
+
 ## Development
 
 ```bash

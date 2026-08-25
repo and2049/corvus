@@ -1,0 +1,167 @@
+#!/usr/bin/env bash
+set -euo pipefail
+APP=corvus
+REPO=and2049/corvus
+
+MUTED='\033[0;2m'
+RED='\033[0;31m'
+ORANGE='\033[38;5;214m'
+NC='\033[0m' # No Color
+
+usage() {
+    cat <<EOF
+Corvus Installer
+
+Usage: install [options]
+
+Options:
+    -h, --help              Display this help message
+    -v, --version <version> Install a specific version (e.g., 0.1.0)
+        --no-modify-path    Don't modify shell config files (.zshrc, .bashrc, etc.)
+
+Examples:
+    curl -fsSL https://github.com/$REPO/releases/latest/download/install | bash
+    curl -fsSL https://github.com/$REPO/releases/latest/download/install | bash -s -- --version 0.1.0
+EOF
+}
+
+requested_version=${VERSION:-}
+no_modify_path=false
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -h|--help) usage; exit 0 ;;
+        -v|--version)
+            if [[ -n "${2:-}" ]]; then
+                requested_version="$2"; shift 2
+            else
+                echo -e "${RED}Error: --version requires a version argument${NC}"; exit 1
+            fi
+            ;;
+        --no-modify-path) no_modify_path=true; shift ;;
+        *) echo -e "${ORANGE}Warning: Unknown option '$1'${NC}" >&2; shift ;;
+    esac
+done
+
+raw_os=$(uname -s)
+case "$raw_os" in
+  Darwin*) os="darwin" ;;
+  Linux*) os="linux" ;;
+  MINGW*|MSYS*|CYGWIN*) os="windows" ;;
+  *) echo -e "${RED}Unsupported OS: $raw_os${NC}"; exit 1 ;;
+esac
+
+arch=$(uname -m)
+[[ "$arch" == "aarch64" ]] && arch="arm64"
+[[ "$arch" == "x86_64" ]] && arch="x64"
+
+# Rosetta: a darwin-x64 shell on Apple Silicon should fetch the arm64 build.
+if [ "$os" = "darwin" ] && [ "$arch" = "x64" ]; then
+  if [ "$(sysctl -n sysctl.proc_translated 2>/dev/null || echo 0)" = "1" ]; then
+    arch="arm64"
+  fi
+fi
+
+combo="$os-$arch"
+case "$combo" in
+  linux-x64|linux-arm64|darwin-x64|darwin-arm64|windows-x64) ;;
+  *) echo -e "${RED}Unsupported OS/Arch: $combo${NC}"; exit 1 ;;
+esac
+
+archive_ext=".tar.gz"
+[ "$os" != "linux" ] && archive_ext=".zip"
+
+target="$os-$arch"
+filename="$APP-$target$archive_ext"
+
+if ! command -v tar >/dev/null 2>&1; then
+    echo -e "${RED}Error: 'tar' is required but not installed.${NC}"; exit 1
+fi
+if [ "$os" != "linux" ] && ! command -v unzip >/dev/null 2>&1; then
+    echo -e "${RED}Error: 'unzip' is required but not installed.${NC}"; exit 1
+fi
+
+INSTALL_DIR=$HOME/.$APP/bin
+mkdir -p "$INSTALL_DIR"
+
+if [ -z "$requested_version" ]; then
+    url="https://github.com/$REPO/releases/latest/download/$filename"
+    specific_version=$(curl -s "https://api.github.com/repos/$REPO/releases/latest" | sed -n 's/.*"tag_name": *"v\([^"]*\)".*/\1/p')
+    if [[ -z "$specific_version" ]]; then
+        echo -e "${RED}Failed to fetch version information${NC}"; exit 1
+    fi
+else
+    requested_version="${requested_version#v}"
+    url="https://github.com/$REPO/releases/download/v${requested_version}/$filename"
+    specific_version=$requested_version
+    http_status=$(curl -sI -o /dev/null -w "%{http_code}" "https://github.com/$REPO/releases/tag/v${requested_version}")
+    if [ "$http_status" = "404" ]; then
+        echo -e "${RED}Error: Release v${requested_version} not found${NC}"
+        echo -e "${MUTED}Available releases: https://github.com/$REPO/releases${NC}"
+        exit 1
+    fi
+fi
+
+# Already at the target version? Nothing to do.
+if command -v "$APP" >/dev/null 2>&1; then
+    installed_version=$("$APP" --version 2>/dev/null | awk '{print $2}' | sed 's/^v//' || echo "")
+    if [ -n "$installed_version" ] && [ "$installed_version" = "$specific_version" ]; then
+        echo -e "${MUTED}Version ${NC}$specific_version${MUTED} already installed${NC}"
+        exit 0
+    fi
+fi
+
+echo -e "\n${MUTED}Installing ${NC}$APP ${MUTED}version: ${NC}$specific_version"
+tmp_dir="${TMPDIR:-/tmp}/${APP}_install_$$"
+mkdir -p "$tmp_dir"
+trap 'rm -rf "$tmp_dir"' EXIT
+
+curl -fL -# -o "$tmp_dir/$filename" "$url"
+
+if [ "$os" = "linux" ]; then
+    tar -xzf "$tmp_dir/$filename" -C "$tmp_dir"
+else
+    unzip -q "$tmp_dir/$filename" -d "$tmp_dir"
+fi
+
+binary_file="$APP"
+if [ "$os" = "windows" ]; then
+    binary_file="$APP.exe"
+    if [ -f "$tmp_dir/$APP" ] && [ ! -f "$tmp_dir/$APP.exe" ]; then
+        mv "$tmp_dir/$APP" "$tmp_dir/$APP.exe"
+    fi
+fi
+
+mv "$tmp_dir/$binary_file" "$INSTALL_DIR/"
+[ "$os" != "windows" ] && chmod 755 "$INSTALL_DIR/$binary_file"
+
+add_to_path() {
+    local config_file=$1 command=$2
+    if grep -Fxq "$command" "$config_file" 2>/dev/null; then
+        echo -e "${MUTED}Already on \$PATH in ${NC}$config_file"
+    elif [[ -w $config_file || ! -e $config_file ]]; then
+        printf '\n# %s\n%s\n' "$APP" "$command" >> "$config_file"
+        echo -e "${MUTED}Added ${NC}$APP ${MUTED}to \$PATH in ${NC}$config_file"
+    else
+        echo -e "${ORANGE}Manually add to $config_file:${NC}\n  $command"
+    fi
+}
+
+if [[ "$no_modify_path" != "true" ]] && [[ ":$PATH:" != *":$INSTALL_DIR:"* ]]; then
+    current_shell=$(basename "${SHELL:-bash}")
+    case $current_shell in
+        fish) add_to_path "$HOME/.config/fish/config.fish" "fish_add_path $INSTALL_DIR" ;;
+        zsh)  add_to_path "$HOME/.zshrc" "export PATH=$INSTALL_DIR:\$PATH" ;;
+        *)    add_to_path "$HOME/.bashrc" "export PATH=$INSTALL_DIR:\$PATH" ;;
+    esac
+    echo -e "${MUTED}Restart your shell or run: ${NC}export PATH=$INSTALL_DIR:\$PATH"
+fi
+
+if [ -n "${GITHUB_ACTIONS-}" ] && [ "${GITHUB_ACTIONS}" = "true" ] && [ -n "${GITHUB_PATH-}" ]; then
+    echo "$INSTALL_DIR" >> "$GITHUB_PATH"
+fi
+
+echo -e ""
+echo -e "$APP installed successfully!"
+echo -e "${MUTED}Run ${NC}$APP${MUTED} to launch. More info: ${NC}https://github.com/$REPO"
+echo -e ""
