@@ -1,0 +1,6 @@
+# The bash installer is served raw from GitHub releases and piped to `bash`;
+# CRLF line endings would break its shebang and parsing. Force LF regardless of
+# core.autocrlf on any contributor's machine.
+install text eol=lf
+*.sh text eol=lf
+install.ps1 text eol=crlf

@@ -52,7 +52,6 @@ type Target = { os: "linux" | "darwin" | "windows"; arch: "x64" | "arm64" }
 const allTargets: Target[] = [
   { os: "linux", arch: "x64" },
   { os: "linux", arch: "arm64" },
-  { os: "darwin", arch: "x64" },
   { os: "darwin", arch: "arm64" },
   { os: "windows", arch: "x64" },
 ]
