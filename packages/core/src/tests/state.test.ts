@@ -128,4 +128,51 @@ describe("loadDownloads", () => {
       await rm(dir, { recursive: true })
     }
   })
+
+  test("accepts http entries with empty magnets and rejects malformed ones", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "corvus-state-"))
+    const file = path.join(dir, "downloads.json")
+    try {
+      await writeFile(
+        file,
+        JSON.stringify([
+          {
+            magnet: "",
+            name: "A Video",
+            addedAt: 1,
+            done: false,
+            http: { url: "https://example.com/v", title: "A Video", format: "137+bestaudio" },
+          },
+          { magnet: "", name: "bad-http", addedAt: 1, done: false, http: { url: "", title: "x", format: "1" } },
+          { magnet: "", name: "bad-http-2", addedAt: 1, done: false, http: { url: "https://x", title: "x" } },
+          {
+            magnet: "",
+            name: "A Song",
+            addedAt: 2,
+            done: false,
+            http: { url: "https://example.com/s", title: "A Song", format: "bestaudio/best", extractAudio: true, audioFormat: "mp3" },
+          },
+          {
+            magnet: "",
+            name: "bad-audio",
+            addedAt: 3,
+            done: false,
+            http: { url: "https://x2", title: "x", format: "1", extractAudio: "yes" },
+          },
+        ]),
+      )
+      const loaded = await loadDownloads(file)
+      expect(loaded.map((entry) => entry.name)).toEqual(["A Video", "A Song"])
+      expect(loaded[0]!.http).toEqual({ url: "https://example.com/v", title: "A Video", format: "137+bestaudio" })
+      expect(loaded[1]!.http).toEqual({
+        url: "https://example.com/s",
+        title: "A Song",
+        format: "bestaudio/best",
+        extractAudio: true,
+        audioFormat: "mp3",
+      })
+    } finally {
+      await rm(dir, { recursive: true })
+    }
+  })
 })

@@ -23,6 +23,12 @@ export interface CloudflareCredential {
 
 export type CloudflareConfig = Readonly<Record<string, CloudflareCredential>>
 
+export interface YtDlpConfig {
+  readonly path?: string
+  readonly format?: string
+  readonly audioFormat?: string
+}
+
 export interface CorvusConfig {
   readonly downloadDir: string
   readonly seedAfterComplete: boolean
@@ -34,6 +40,7 @@ export interface CorvusConfig {
   readonly downloadLimit?: number
   readonly uploadLimit?: number
   readonly cloudflare?: CloudflareConfig
+  readonly ytdlp?: YtDlpConfig
   readonly providers: ProvidersConfig
 }
 

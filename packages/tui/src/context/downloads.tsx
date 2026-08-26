@@ -1,7 +1,21 @@
 import { createContext, createSignal, onCleanup, useContext, type JSX } from "solid-js"
 import { Effect } from "effect"
-import { looksLikeTorrentInput, magnetFromTorrentInput } from "@corvus/core"
-import type { DownloadSnapshot, Engine, PersistedDownload, SoulseekDownloads } from "@corvus/core"
+import {
+  AUDIO_FORMAT_EXPR,
+  DEFAULT_YTDLP_AUDIO_FORMAT,
+  looksLikeTorrentInput,
+  magnetFromTorrentInput,
+  resolveFormatExpr,
+} from "@corvus/core"
+import type {
+  DownloadSnapshot,
+  Engine,
+  HttpDownloads,
+  PersistedDownload,
+  SoulseekDownloads,
+  YtDlpFormat,
+  YtDlpInfo,
+} from "@corvus/core"
 import {
   buildMagnet,
   DEFAULT_TRACKERS,
@@ -14,11 +28,23 @@ import {
 
 export type AddOutcome = "added" | "duplicate" | "invalid"
 
+export type ProbeOutcome = { info: YtDlpInfo } | { error: string }
+
+// The chosen yt-dlp audio-extraction target. `format` is the --audio-format
+// container (mp3/flac/best/...); `quality` is --audio-quality for lossy re-encodes.
+export interface AudioSpec {
+  readonly format: string
+  readonly quality?: string
+}
+
 export interface DownloadsStore {
   readonly snapshots: () => readonly DownloadSnapshot[]
   readonly add: (result: TorrentResult, providers: readonly Provider[]) => Promise<boolean>
   readonly addMagnet: (magnet: string) => AddOutcome
   readonly addInput: (raw: string) => Promise<AddOutcome>
+  readonly probeHttp: (url: string) => Promise<ProbeOutcome>
+  readonly addHttp: (info: YtDlpInfo, format: YtDlpFormat | undefined, audio?: AudioSpec) => AddOutcome
+  readonly audioFormat: () => string
   readonly remove: (key: string, opts?: { deleteData?: boolean }) => Promise<void>
   readonly togglePause: (key: string) => void
   readonly toggleFile: (key: string, index: number) => void
@@ -32,6 +58,7 @@ const DownloadsContext = createContext<DownloadsStore>()
 export function DownloadsProvider(props: {
   engine: Engine
   slsk?: SoulseekDownloads
+  http?: HttpDownloads
   persisted?: readonly PersistedDownload[]
   persist: (downloads: readonly PersistedDownload[]) => void
   children: JSX.Element
@@ -39,6 +66,7 @@ export function DownloadsProvider(props: {
   const allSnapshots = (): DownloadSnapshot[] => [
     ...props.engine.snapshots(),
     ...(props.slsk?.snapshots() ?? []),
+    ...(props.http?.snapshots() ?? []),
   ]
   const [snapshots, setSnapshots] = createSignal<readonly DownloadSnapshot[]>(allSnapshots())
 
@@ -78,7 +106,7 @@ export function DownloadsProvider(props: {
           : {}),
       } satisfies PersistedDownload
     })
-    props.persist([...torrents, ...(props.slsk?.persisted() ?? [])])
+    props.persist([...torrents, ...(props.slsk?.persisted() ?? []), ...(props.http?.persisted() ?? [])])
   }
 
   const deselectedIndexes = (snapshot: DownloadSnapshot): number[] | undefined => {
@@ -136,8 +164,44 @@ export function DownloadsProvider(props: {
     return addMagnet(text)
   }
 
+  const probeHttp = async (url: string): Promise<ProbeOutcome> => {
+    if (props.http === undefined) return { error: "yt-dlp backend unavailable" }
+    try {
+      return { info: await props.http.probe(url.trim()) }
+    } catch (error) {
+      return { error: error instanceof Error ? error.message : String(error) }
+    }
+  }
+
+  const addHttp = (info: YtDlpInfo, format: YtDlpFormat | undefined, audio?: AudioSpec): AddOutcome => {
+    const http = props.http
+    if (http === undefined) return "invalid"
+    if (http.keys().includes(`http:${info.url}`)) return "duplicate"
+    if (audio !== undefined) {
+      // Audio extraction ignores the highlighted video format: it pulls the best
+      // audio and (via yt-dlp -x) re-encodes it to the chosen container/quality.
+      http.add({
+        url: info.url,
+        title: info.title,
+        format: AUDIO_FORMAT_EXPR,
+        extractAudio: true,
+        audioFormat: audio.format,
+        audioQuality: audio.quality,
+      })
+    } else {
+      if (format === undefined) return "invalid"
+      http.add({ url: info.url, title: info.title, format: resolveFormatExpr(format), size: format.filesize })
+    }
+    tick()
+    persistNow()
+    return "added"
+  }
+
+  const audioFormat = (): string => props.http?.audioFormat() ?? DEFAULT_YTDLP_AUDIO_FORMAT
+
   const remove = async (key: string, opts?: { deleteData?: boolean }) => {
     if (key.startsWith("slsk:")) await props.slsk?.remove(key, opts)
+    else if (key.startsWith("http:")) await props.http?.remove(key, opts)
     else await props.engine.remove(key, opts)
     tick()
     persistNow()
@@ -148,6 +212,13 @@ export function DownloadsProvider(props: {
       const state = props.slsk?.snapshots().find((s) => s.key === key)?.state
       if (state === "paused") props.slsk?.resume(key)
       else props.slsk?.pause(key)
+      tick()
+      return
+    }
+    if (key.startsWith("http:")) {
+      const state = props.http?.snapshots().find((s) => s.key === key)?.state
+      if (state === "paused") props.http?.resume(key)
+      else props.http?.pause(key)
       tick()
       return
     }
@@ -168,6 +239,7 @@ export function DownloadsProvider(props: {
 
   const retry = async (key: string) => {
     if (key.startsWith("slsk:")) await props.slsk?.retry(key)
+    else if (key.startsWith("http:")) props.http?.retry(key)
     else await props.engine.retry(key)
     tick()
     persistNow()
@@ -178,6 +250,7 @@ export function DownloadsProvider(props: {
       const file = props.slsk?.fileFor(key)
       return file === undefined ? undefined : `${file.username}\\${file.path}`
     }
+    if (key.startsWith("http:")) return props.http?.urlFor(key)
     return props.engine.magnetFor(key)
   }
 
@@ -186,6 +259,9 @@ export function DownloadsProvider(props: {
     add,
     addMagnet,
     addInput,
+    probeHttp,
+    addHttp,
+    audioFormat,
     remove,
     togglePause,
     toggleFile,

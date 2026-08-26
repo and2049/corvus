@@ -5,6 +5,7 @@ import {
   configDir,
   DownloadsFile,
   Engine,
+  HttpDownloads,
   loadConfig,
   loadDownloads,
   saveConfig,
@@ -42,11 +43,14 @@ export async function boot(): Promise<void> {
     },
   })
 
+  const httpDownloads = new HttpDownloads({ downloadDir: config.downloadDir, config: config.ytdlp })
+
   const downloadsFile = new DownloadsFile(`${configDir()}/downloads.json`)
   const persisted = await loadDownloads(`${configDir()}/downloads.json`)
   for (const download of persisted) {
     if (download.done) continue
     if (download.slsk !== undefined) slskDownloads.add(download.slsk, download.addedAt)
+    else if (download.http !== undefined) httpDownloads.add(download.http, download.addedAt)
     else engine.add(download.magnet, { deselected: download.deselected })
   }
 
@@ -56,6 +60,7 @@ export async function boot(): Promise<void> {
     shuttingDown = true
     await downloadsFile.close()
     await slskDownloads.shutdown()
+    await httpDownloads.shutdown()
     await engine.shutdown()
   }
 
@@ -81,6 +86,7 @@ export async function boot(): Promise<void> {
         config={config}
         engine={engine}
         slsk={slskDownloads}
+        http={httpDownloads}
         persisted={persisted}
         persist={(d: readonly PersistedDownload[]) => downloadsFile.set(d)}
         onConfigChange={(patch: ConfigPatch) => void saveConfig(patch)}

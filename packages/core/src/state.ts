@@ -7,6 +7,15 @@ export interface PersistedSlskFile {
   readonly size: number
 }
 
+export interface PersistedHttpDownload {
+  readonly url: string
+  readonly title: string
+  readonly format: string
+  readonly extractAudio?: boolean
+  readonly audioFormat?: string
+  readonly audioQuality?: string
+}
+
 export interface PersistedDownload {
   readonly magnet: string
   readonly name: string
@@ -14,6 +23,7 @@ export interface PersistedDownload {
   readonly done: boolean
   readonly deselected?: readonly number[]
   readonly slsk?: PersistedSlskFile
+  readonly http?: PersistedHttpDownload
 }
 
 export async function loadDownloads(filePath: string): Promise<PersistedDownload[]> {
@@ -47,6 +57,21 @@ function isPersistedSlskFile(value: unknown): value is PersistedSlskFile {
   )
 }
 
+function isPersistedHttpDownload(value: unknown): value is PersistedHttpDownload {
+  if (typeof value !== "object" || value === null) return false
+  const record = value as Record<string, unknown>
+  if (record["extractAudio"] !== undefined && typeof record["extractAudio"] !== "boolean") return false
+  if (record["audioFormat"] !== undefined && typeof record["audioFormat"] !== "string") return false
+  if (record["audioQuality"] !== undefined && typeof record["audioQuality"] !== "string") return false
+  return (
+    typeof record["url"] === "string" &&
+    record["url"] !== "" &&
+    typeof record["title"] === "string" &&
+    typeof record["format"] === "string" &&
+    record["format"] !== ""
+  )
+}
+
 function isPersistedDownload(value: unknown): value is PersistedDownload {
   if (typeof value !== "object" || value === null) return false
   const record = value as Record<string, unknown>
@@ -58,10 +83,18 @@ function isPersistedDownload(value: unknown): value is PersistedDownload {
   ) {
     return false
   }
-  // A magnet identifies a torrent download; a slsk block identifies a soulseek
-  // one. Entries with neither are dropped (also rejects pre-slsk empty magnets).
-  if (record["magnet"] === "" && !isPersistedSlskFile(record["slsk"])) return false
+  // A magnet identifies a torrent download; a slsk block a soulseek one; an http
+  // block a yt-dlp one. Entries with none are dropped (also rejects pre-slsk empty
+  // magnets).
+  if (
+    record["magnet"] === "" &&
+    !isPersistedSlskFile(record["slsk"]) &&
+    !isPersistedHttpDownload(record["http"])
+  ) {
+    return false
+  }
   if (record["slsk"] !== undefined && !isPersistedSlskFile(record["slsk"])) return false
+  if (record["http"] !== undefined && !isPersistedHttpDownload(record["http"])) return false
   const deselected = record["deselected"]
   if (deselected === undefined) return true
   return Array.isArray(deselected) && deselected.every((index) => typeof index === "number" && Number.isInteger(index) && index >= 0)
