@@ -241,28 +241,27 @@ export function DownloadsProvider(props: {
     persistNow()
   }
 
+  const isTorrent = (key: string) => !key.startsWith("slsk:") && !key.startsWith("http:")
+
   const selectFiles = (key: string, all: boolean) => {
-    if (key.startsWith("slsk:") || key.startsWith("http:")) return
+    if (!isTorrent(key)) return
     if (all) props.engine.selectAll(key)
     else props.engine.selectNone(key)
     tick()
     persistNow()
   }
 
-  const toggleSeed = (key: string) => {
-    if (key.startsWith("slsk:") || key.startsWith("http:")) return
-    const seeding = props.engine.snapshots().find((s) => s.key === key)?.seeding
-    props.engine.setSeed(key, !(seeding ?? false))
+  const toggleTorrentFlag = (key: string, flag: "seeding" | "sequential") => {
+    if (!isTorrent(key)) return
+    const next = props.engine.snapshots().find((s) => s.key === key)?.[flag] !== true
+    if (flag === "seeding") props.engine.setSeed(key, next)
+    else props.engine.setSequential(key, next)
     tick()
     persistNow()
   }
 
-  const toggleSequential = (key: string) => {
-    if (key.startsWith("slsk:") || key.startsWith("http:")) return
-    const sequential = props.engine.snapshots().find((s) => s.key === key)?.sequential
-    props.engine.setSequential(key, !(sequential ?? false))
-    tick()
-  }
+  const toggleSeed = (key: string) => toggleTorrentFlag(key, "seeding")
+  const toggleSequential = (key: string) => toggleTorrentFlag(key, "sequential")
 
   const retry = async (key: string) => {
     if (key.startsWith("slsk:")) await props.slsk?.retry(key)

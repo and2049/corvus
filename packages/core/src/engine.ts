@@ -1,7 +1,7 @@
 import { rm } from "node:fs/promises"
 import path from "node:path"
 import { infoHashFromMagnet } from "@corvus/providers"
-import { createWebTorrentClient, type Torrent, type TorrentClient } from "./webtorrent"
+import { createWebTorrentClient, type Torrent, type TorrentClient, type Wire } from "./webtorrent"
 
 export interface FileSnapshot {
   readonly name: string
@@ -40,12 +40,10 @@ export interface TorrentLike {
   readonly downloaded: number
   readonly length: number
   readonly downloadSpeed: number
-  readonly uploadSpeed: number
   readonly numPeers: number
   readonly timeRemaining: number
   readonly done: boolean
   readonly paused: boolean
-  readonly uploaded: number
   readonly pieces: readonly unknown[]
   readonly bitfield?: { get(index: number): boolean }
   select(start: number, end: number, priority?: number): void
@@ -71,10 +69,12 @@ export function snapshotFrom(key: string, torrent: TorrentLike): DownloadSnapsho
     downloadedBytes: torrent.downloaded,
     totalBytes: torrent.length,
     downloadSpeed: torrent.downloadSpeed,
-    uploadSpeed: torrent.uploadSpeed,
+    // Upload stats are counted by the engine from wire piece events; webtorrent's
+    // own uploadSpeed/uploaded count raw socket bytes (protocol chatter included).
+    uploadSpeed: 0,
     peers: torrent.numPeers,
-    uploadedBytes: torrent.uploaded,
-    ratio: torrent.downloaded > 0 ? torrent.uploaded / torrent.downloaded : 0,
+    uploadedBytes: 0,
+    ratio: 0,
     seeding: false,
     sequential: false,
     etaSeconds: eta,
@@ -92,6 +92,8 @@ interface Entry {
   seed: boolean
   sequential: boolean
   seqWindow?: { from: number; to: number }
+  uploadedBytes: number
+  uploadSample: { at: number; bytes: number; speed: number }
 }
 
 export interface EngineOptions {
@@ -150,6 +152,8 @@ export class Engine {
       deselected: new Set(opts?.deselected ?? []),
       seed: opts?.seed ?? this.seedAfterComplete,
       sequential: opts?.sequential ?? false,
+      uploadedBytes: 0,
+      uploadSample: { at: Date.now(), bytes: 0, speed: 0 },
     }
     this.entries.set(key, entry)
     this.attach(key, entry)
@@ -165,6 +169,7 @@ export class Engine {
       return
     }
     entry.torrent = torrent
+    torrent.on("wire", (wire: Wire) => gateWire(entry, wire))
     torrent.on("download", () => {
       const current = this.entries.get(key)
       if (current?.sequential === true) this.applySequentialWindow(current)
@@ -265,22 +270,29 @@ export class Engine {
     entry.seqWindow = { from: first, to }
   }
 
-  // Per-torrent seeding override. Turning seed ON for an already-destroyed done
-  // torrent re-attaches it (webtorrent resumes from the existing data on disk);
-  // turning it OFF on a live done torrent destroys it and parks the entry as done.
+  // Per-torrent seeding override; off by default, so a torrent never uploads
+  // until this is turned on (see gateWire). Turning seed ON for an
+  // already-destroyed done torrent re-attaches it (webtorrent resumes from the
+  // existing data on disk); turning it OFF on a live done torrent destroys it
+  // and parks the entry as done. On a live torrent it chokes/unchokes peers.
   setSeed(key: string, value: boolean): void {
     const entry = this.entries.get(key)
     if (entry === undefined) return
     entry.seed = value
-    if (value && entry.torrent === undefined && entry.snapshot.state === "done") {
-      this.attach(key, entry)
+    const torrent = entry.torrent
+    if (torrent === undefined) {
+      if (value && entry.snapshot.state === "done") this.attach(key, entry)
       return
     }
-    if (!value && entry.torrent !== undefined && entry.snapshot.state === "done") {
-      entry.torrent.destroy()
+    if (!value && entry.snapshot.state === "done") {
+      torrent.destroy()
       entry.torrent = undefined
-      entry.snapshot = { ...entry.snapshot, state: "done", progress: 1, seeding: false }
+      entry.snapshot = { ...entry.snapshot, seeding: false }
+      return
     }
+    if (value) torrent._rechoke()
+    else for (const wire of torrent.wires) wire.choke()
+    this.refresh(key, torrent)
   }
 
   selectAll(key: string): void {
@@ -372,6 +384,9 @@ export class Engine {
       fetchingSeconds: elapsedFetching(base.state, entry.addedAt),
       seeding: entry.seed,
       sequential: entry.sequential,
+      uploadedBytes: entry.uploadedBytes,
+      uploadSpeed: uploadSpeedOf(entry),
+      ratio: torrent.downloaded > 0 ? entry.uploadedBytes / torrent.downloaded : 0,
       files: torrent.files.map((file, index) => ({
         name: file.name,
         path: file.path,
@@ -384,6 +399,37 @@ export class Engine {
 }
 
 const SEQ_WINDOW = 32
+
+// Seeding gate and upload accounting. wire.piece is the only path that sends
+// file data, so gating it on the live seed flag makes "not seeding" mean zero
+// upload; gating unchoke keeps the choke state protocol-honest so peers do not
+// request in vain. The wire "upload" event fires only for piece data, unlike
+// webtorrent's torrent.uploadSpeed which counts raw socket bytes (handshakes,
+// metadata serving, PEX) and therefore reads nonzero even when never seeding.
+function gateWire(entry: Entry, wire: Wire): void {
+  const unchoke = wire.unchoke.bind(wire)
+  const piece = wire.piece.bind(wire)
+  wire.unchoke = () => {
+    if (entry.seed) unchoke()
+  }
+  wire.piece = (index, offset, buffer) => {
+    if (entry.seed) piece(index, offset, buffer)
+  }
+  wire.on("upload", (bytes: number) => {
+    entry.uploadedBytes += bytes
+  })
+}
+
+function uploadSpeedOf(entry: Entry): number {
+  const sample = entry.uploadSample
+  const dt = Date.now() - sample.at
+  if (dt >= 1000) {
+    sample.speed = Math.round(((entry.uploadedBytes - sample.bytes) * 1000) / dt)
+    sample.at = Date.now()
+    sample.bytes = entry.uploadedBytes
+  }
+  return sample.speed
+}
 
 function elapsedFetching(state: DownloadSnapshot["state"], addedAt: number): number | undefined {
   return state === "fetching"

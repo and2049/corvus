@@ -2,7 +2,7 @@
 import WebTorrentReal from "webtorrent"
 import type { TorrentClient } from "./webtorrent-types"
 
-export type { Torrent, TorrentClient, TorrentFile } from "./webtorrent-types"
+export type { Torrent, TorrentClient, TorrentFile, Wire } from "./webtorrent-types"
 
 export interface WebTorrentOptions {
   readonly torrentPort?: number

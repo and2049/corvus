@@ -1,8 +1,32 @@
 import { describe, expect, test } from "bun:test"
-import type { TorrentClient, Torrent, TorrentFile } from "../webtorrent-types"
+import type { TorrentClient, Torrent, TorrentFile, Wire } from "../webtorrent-types"
 import { Engine } from "../engine"
 
 const MAGNET = `magnet:?xt=urn:btih:${"ab".repeat(20)}&dn=Test`
+
+class FakeWire implements Wire {
+  amChoking = true
+  piecesSent: number[] = []
+  private readonly handlers = new Map<string, ((...args: never[]) => void)[]>()
+  choke(): void {
+    this.amChoking = true
+  }
+  unchoke(): void {
+    this.amChoking = false
+  }
+  piece(index: number, _offset: number, buffer: Uint8Array): void {
+    this.piecesSent.push(index)
+    this.emit("upload", buffer.length)
+  }
+  on(event: string, cb: (...args: never[]) => void): void {
+    const list = this.handlers.get(event) ?? []
+    list.push(cb)
+    this.handlers.set(event, list)
+  }
+  emit(event: string, arg?: unknown): void {
+    for (const cb of this.handlers.get(event) ?? []) (cb as (a?: unknown) => void)(arg)
+  }
+}
 
 class FakeTorrent {
   readonly infoHash: string
@@ -22,6 +46,12 @@ class FakeTorrent {
   destroyed = false
   pieces: unknown[] = []
   bitfield: { get(index: number): boolean } | undefined
+  wires: FakeWire[] = []
+  rechokeCalls = 0
+  _rechoke(): void {
+    this.rechokeCalls += 1
+    for (const wire of this.wires) wire.unchoke()
+  }
   selections: { from: number; to: number; priority: number }[] = []
 
   select(from: number, to: number, priority = 0): void {
@@ -169,15 +199,59 @@ describe("Engine", () => {
     expect(engine.snapshots()[0]!.seeding).toBe(false)
   })
 
-  test("snapshots carry upload stats and ratio", () => {
+  test("a new download does not seed: unchoke and piece are gated off", () => {
     const [engine, client] = makeEngine()
     engine.add(MAGNET)
     const torrent = client.torrents[0]!
+    const wire = new FakeWire()
+    torrent.wires.push(wire)
+    torrent.emit("wire", wire)
+    // webtorrent would unchoke an interested peer; the gate keeps it choked,
+    // and even a request that slips through sends no data.
+    wire.unchoke()
+    expect(wire.amChoking).toBe(true)
+    wire.piece(0, 0, new Uint8Array(16))
+    expect(wire.piecesSent).toEqual([])
+    expect(engine.snapshots()[0]!.uploadedBytes).toBe(0)
+  })
+
+  test("setSeed(true) on a live download unchokes wires and counts piece uploads", () => {
+    const [engine, client] = makeEngine()
+    const key = engine.add(MAGNET)
+    const torrent = client.torrents[0]!
     torrent.progress = 0.5
     torrent.downloaded = 1000
-    torrent.uploaded = 250
-    expect(engine.snapshots()[0]!.uploadedBytes).toBe(250)
-    expect(engine.snapshots()[0]!.ratio).toBe(0.25)
+    const wire = new FakeWire()
+    torrent.wires.push(wire)
+    torrent.emit("wire", wire)
+    engine.setSeed(key, true)
+    expect(torrent.rechokeCalls).toBe(1)
+    expect(wire.amChoking).toBe(false)
+    wire.piece(3, 0, new Uint8Array(250))
+    expect(wire.piecesSent).toEqual([3])
+    const snap = engine.snapshots()[0]!
+    expect(snap.seeding).toBe(true)
+    expect(snap.uploadedBytes).toBe(250)
+    expect(snap.ratio).toBe(0.25)
+  })
+
+  test("setSeed(false) on a live seeding download chokes wires and re-gates", () => {
+    const [engine, client] = makeEngine()
+    const key = engine.add(MAGNET)
+    const torrent = client.torrents[0]!
+    torrent.progress = 0.5
+    const wire = new FakeWire()
+    torrent.wires.push(wire)
+    torrent.emit("wire", wire)
+    engine.setSeed(key, true)
+    expect(wire.amChoking).toBe(false)
+    engine.setSeed(key, false)
+    expect(wire.amChoking).toBe(true)
+    wire.unchoke()
+    expect(wire.amChoking).toBe(true)
+    wire.piece(0, 0, new Uint8Array(16))
+    expect(wire.piecesSent).toEqual([])
+    expect(engine.snapshots()[0]!.seeding).toBe(false)
   })
 
   test("selectAll and selectNone bulk-flip selection", () => {

@@ -7,9 +7,20 @@ export interface TorrentFile {
   deselect(): void
 }
 
+export interface Wire {
+  amChoking: boolean
+  choke(): void
+  unchoke(): void
+  piece(index: number, offset: number, buffer: Uint8Array): void
+  on(event: string, cb: (...args: never[]) => void): void
+}
+
 export interface Torrent {
   readonly infoHash: string
   name?: string
+  readonly wires: readonly Wire[]
+  // webtorrent internal: runs the choke algorithm immediately.
+  _rechoke(): void
   readonly progress: number
   readonly downloaded: number
   readonly uploaded: number
