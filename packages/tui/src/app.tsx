@@ -66,7 +66,7 @@ export function Router(props: { onExit?: () => void; skipped?: readonly string[]
   const shell = useShell()
   const renderer = useRenderer()
   const [route, setRoute] = createSignal<Route>("home")
-  const [returnTo, setReturnTo] = createSignal<Route>("home")
+  const [stack, setStack] = createSignal<readonly Route[]>([])
 
   createEffect(() => {
     const skipped = props.skipped ?? []
@@ -76,8 +76,16 @@ export function Router(props: { onExit?: () => void; skipped?: readonly string[]
   })
 
   const open = (target: Route) => {
-    setReturnTo(route())
+    if (route() === target) return
+    setStack((s) => [...s, route()])
     setRoute(target)
+  }
+
+  const popStack = (): Route => {
+    const s = stack()
+    const target = s[s.length - 1] ?? "home"
+    setStack(s.slice(0, -1))
+    return target
   }
 
   const copySelection = () => {
@@ -122,7 +130,7 @@ export function Router(props: { onExit?: () => void; skipped?: readonly string[]
   })
 
   const backFrom = (current: Route): Route => {
-    if (current === "settings" || current === "sources") return returnTo()
+    if (current === "settings" || current === "sources") return popStack()
     if (current === "results") return "home"
     return search.query() !== "" ? "results" : "home"
   }
