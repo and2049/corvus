@@ -16,7 +16,10 @@ export async function revealPath(target: string, deps?: RevealDeps): Promise<boo
   const spawn = deps?.spawn ?? defaultSpawn
   try {
     if (platform === "win32") {
-      await spawn(["explorer", `/select,${path.win32.normalize(target)}`])
+      // "/select," and the path must be separate argv entries: combined, a path
+      // with spaces gets the whole argument quoted ("/select,C:\...") which
+      // explorer cannot parse, so it falls back to opening Documents.
+      await spawn(["explorer", "/select,", path.win32.normalize(target)])
     } else if (platform === "darwin") {
       await spawn(["open", "-R", target])
     } else {

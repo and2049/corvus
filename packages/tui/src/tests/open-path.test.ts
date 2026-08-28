@@ -12,10 +12,12 @@ function capture(): { commands: (readonly string[])[]; spawn: (command: readonly
 }
 
 describe("revealPath", () => {
-  test("win32 selects the file in explorer", async () => {
+  test("win32 selects the file in explorer, path as its own argument", async () => {
     const fake = capture()
-    expect(await revealPath("C:\\dl\\file.mkv", { platform: "win32", spawn: fake.spawn })).toBe(true)
-    expect(fake.commands).toEqual([["explorer", "/select,C:\\dl\\file.mkv"]])
+    expect(
+      await revealPath("C:\\dl\\My File 1080p.mkv", { platform: "win32", spawn: fake.spawn }),
+    ).toBe(true)
+    expect(fake.commands).toEqual([["explorer", "/select,", "C:\\dl\\My File 1080p.mkv"]])
   })
 
   test("darwin reveals with open -R", async () => {
