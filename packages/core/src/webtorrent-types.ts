@@ -2,13 +2,14 @@ export interface TorrentFile {
   readonly name: string
   readonly path: string
   readonly length: number
+  readonly progress?: number
   select(priority?: number): void
   deselect(): void
 }
 
 export interface Torrent {
   readonly infoHash: string
-  name: string
+  name?: string
   readonly progress: number
   readonly downloaded: number
   readonly uploaded: number
@@ -20,6 +21,10 @@ export interface Torrent {
   readonly done: boolean
   readonly paused: boolean
   readonly files: readonly TorrentFile[]
+  readonly pieces: readonly unknown[]
+  readonly bitfield?: { get(index: number): boolean }
+  select(start: number, end: number, priority?: number): void
+  deselect(start: number, end: number): void
   on(event: string, cb: (...args: never[]) => void): void
   destroy(opts?: { destroyStore?: boolean }, cb?: () => void): void
   pause(): void

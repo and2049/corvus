@@ -48,10 +48,11 @@ export async function boot(): Promise<void> {
   const downloadsFile = new DownloadsFile(`${configDir()}/downloads.json`)
   const persisted = await loadDownloads(`${configDir()}/downloads.json`)
   for (const download of persisted) {
-    if (download.done) continue
+    // Seeding torrents marked done must re-attach (engine.add resumes from disk data).
+    if (download.done && !download.seed) continue
     if (download.slsk !== undefined) slskDownloads.add(download.slsk, download.addedAt)
     else if (download.http !== undefined) httpDownloads.add(download.http, download.addedAt)
-    else engine.add(download.magnet, { deselected: download.deselected })
+    else engine.add(download.magnet, { deselected: download.deselected, seed: download.seed })
   }
 
   let shuttingDown = false

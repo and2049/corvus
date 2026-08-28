@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
-import { createProviders, type ProviderEntry, type SourceOptions } from "../registry"
+import { createProviders, createProvidersWithSkipped, type ProviderEntry, type SourceOptions } from "../registry"
 import type { Provider, TorrentResult } from "../provider"
 
 function fakeProvider(name: string): Provider {
@@ -93,5 +93,16 @@ describe("createProviders", () => {
     }
     const providers = createProviders(entries, sources)
     expect(providers.map((p) => p.name)).toEqual(["knaben", "a-custom", "zeta"])
+  })
+
+  test("createProvidersWithSkipped reports unknown source types", () => {
+    const entries: Record<string, ProviderEntry> = {
+      good: { type: "alpha" },
+      bad: { type: "nope" },
+      missing: {},
+    }
+    const report = createProvidersWithSkipped(entries, testSources)
+    expect(report.providers.map((p) => p.name)).toEqual(["good"])
+    expect(report.skipped).toEqual(["bad", "missing"])
   })
 })

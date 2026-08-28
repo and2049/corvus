@@ -9,7 +9,7 @@ export {
   unionTrackers,
   type ParsedMagnet,
 } from "./magnet"
-export { builtinSources, createProviders } from "./createProviders"
+export { builtinSources, createProviders, createProvidersWithSkipped } from "./createProviders"
 export { betterKeeper, mergeAll, mergeInto, mergeResult, resultKey } from "./merge"
 export {
   DEFAULT_WEIGHTS,

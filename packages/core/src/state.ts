@@ -22,6 +22,7 @@ export interface PersistedDownload {
   readonly addedAt: number
   readonly done: boolean
   readonly deselected?: readonly number[]
+  readonly seed?: boolean
   readonly slsk?: PersistedSlskFile
   readonly http?: PersistedHttpDownload
 }
@@ -96,8 +97,9 @@ function isPersistedDownload(value: unknown): value is PersistedDownload {
   if (record["slsk"] !== undefined && !isPersistedSlskFile(record["slsk"])) return false
   if (record["http"] !== undefined && !isPersistedHttpDownload(record["http"])) return false
   const deselected = record["deselected"]
-  if (deselected === undefined) return true
-  return Array.isArray(deselected) && deselected.every((index) => typeof index === "number" && Number.isInteger(index) && index >= 0)
+  if (deselected !== undefined && !(Array.isArray(deselected) && deselected.every((index) => typeof index === "number" && Number.isInteger(index) && index >= 0))) return false
+  if (record["seed"] !== undefined && typeof record["seed"] !== "boolean") return false
+  return true
 }
 
 export class DownloadsFile {

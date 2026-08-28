@@ -30,6 +30,10 @@ function slskSnapshot(overrides: Partial<DownloadSnapshot>): DownloadSnapshot {
     downloadSpeed: 0,
     uploadSpeed: 0,
     peers: 0,
+    uploadedBytes: 0,
+    ratio: 0,
+    seeding: false,
+    sequential: false,
     etaSeconds: undefined,
     fetchingSeconds: 5,
     files: [],
@@ -198,6 +202,43 @@ describe("soulseek downloads in the TUI", () => {
     await t.mockInput.typeText("r")
     await t.flush()
     expect(slsk.calls.some((call) => call.startsWith("remove:slsk:"))).toBe(true)
+    await t.renderer.destroy()
+  })
+
+  test("torrent rows toggle per-torrent seed and cycle sort modes", async () => {
+    const seedCalls: [string, boolean][] = []
+    const engine = {
+      ...fakeEngine,
+      snapshots: () => [
+        slskSnapshot({ key: "bt:aaa", name: "b-torrent", state: "downloading", progress: 0.5 }),
+        slskSnapshot({ key: "bt:bbb", name: "a-torrent", state: "done", progress: 1, seeding: true, uploadSpeed: 2048 }),
+      ],
+      setSeed: (key: string, value: boolean) => {
+        seedCalls.push([key, value])
+      },
+    } as unknown as Engine
+    const t = await testRender(
+      () => (
+        <DownloadsProvider engine={engine} persist={() => {}}>
+          <Downloads onBack={() => {}} />
+        </DownloadsProvider>
+      ),
+      { width: 100, height: 24 },
+    )
+    await t.flush()
+    const frame = t.captureCharFrame()
+    expect(frame).toContain("b-torrent")
+    expect(frame).toContain("seeding")
+
+    await t.mockInput.typeText("s")
+    await t.flush()
+    expect(seedCalls).toEqual([["bt:aaa", true]])
+
+    // sort cycles added -> progress; the finished row (progress 1) moves first
+    await t.mockInput.typeText("a")
+    await t.flush()
+    const sorted = t.captureCharFrame()
+    expect(sorted.indexOf("a-torrent")).toBeLessThan(sorted.indexOf("b-torrent"))
     await t.renderer.destroy()
   })
 })

@@ -38,6 +38,15 @@ export function createProviders(
   entries: Readonly<Record<string, ProviderEntry | undefined>>,
   sources: readonly SourceDefinition[],
 ): Provider[] {
+  return createProvidersWithSkipped(entries, sources).providers
+}
+
+// Unknown/missing source types are skipped silently by createProviders; this
+// variant surfaces them so config typos are visible in the TUI.
+export function createProvidersWithSkipped(
+  entries: Readonly<Record<string, ProviderEntry | undefined>>,
+  sources: readonly SourceDefinition[],
+): { providers: Provider[]; skipped: readonly string[] } {
   const byType = new Map(sources.map((source) => [source.type, source.create]))
   const names = [
     ...BUILTIN_ORDER.filter((name) => entries[name] !== undefined),
@@ -46,11 +55,15 @@ export function createProviders(
       .sort(),
   ]
   const out: Provider[] = []
+  const skipped: string[] = []
   for (const name of names) {
     const entry = entries[name]
     if (entry === undefined || entry.enabled === false) continue
     const create = byType.get(entry.type ?? name)
-    if (create === undefined) continue
+    if (create === undefined) {
+      skipped.push(name)
+      continue
+    }
     const created = create({
       name,
       baseUrl: entry.baseUrl,
@@ -64,5 +77,5 @@ export function createProviders(
       out.push(provider)
     }
   }
-  return out
+  return { providers: out, skipped }
 }

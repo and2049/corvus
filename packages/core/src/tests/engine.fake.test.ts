@@ -14,11 +14,23 @@ class FakeTorrent {
   downloadSpeed = 0
   uploadSpeed = 0
   numPeers = 0
+  downloadedPieces = new Set<number>()
   timeRemaining = Number.POSITIVE_INFINITY
   done = false
   paused = false
   files: TorrentFile[] = []
   destroyed = false
+  pieces: unknown[] = []
+  bitfield: { get(index: number): boolean } | undefined
+  selections: { from: number; to: number; priority: number }[] = []
+
+  select(from: number, to: number, priority = 0): void {
+    this.selections.push({ from, to, priority })
+  }
+
+  deselect(from: number, to: number): void {
+    this.selections = this.selections.filter((s) => s.from !== from || s.to !== to)
+  }
   private readonly handlers = new Map<string, ((...args: never[]) => void)[]>()
 
   constructor(infoHash: string) {
@@ -122,6 +134,106 @@ describe("Engine", () => {
     torrent.progress = 1
     torrent.emit("done")
     expect(torrent.destroyed).toBe(false)
+  })
+
+  test("setSeed(true) re-attaches a destroyed done torrent and keeps it alive", async () => {
+    const [engine, client] = makeEngine()
+    const key = engine.add(MAGNET)
+    const original = client.torrents[0]!
+    original.done = true
+    original.progress = 1
+    original.emit("done")
+    expect(original.destroyed).toBe(true)
+    engine.setSeed(key, true)
+    expect(client.addCalls).toBe(2)
+    const replacement = client.torrents[1]!
+    expect(replacement.destroyed).toBe(false)
+    replacement.done = true
+    replacement.progress = 1
+    replacement.emit("done")
+    expect(replacement.destroyed).toBe(false)
+    expect(engine.snapshots()[0]!.seeding).toBe(true)
+  })
+
+  test("setSeed(false) parks a live done torrent as done and stops seeding", () => {
+    const [engine, client] = makeEngine({ seedAfterComplete: true })
+    const key = engine.add(MAGNET)
+    const torrent = client.torrents[0]!
+    torrent.done = true
+    torrent.progress = 1
+    torrent.emit("done")
+    expect(torrent.destroyed).toBe(false)
+    engine.setSeed(key, false)
+    expect(torrent.destroyed).toBe(true)
+    expect(engine.snapshots()[0]!.state).toBe("done")
+    expect(engine.snapshots()[0]!.seeding).toBe(false)
+  })
+
+  test("snapshots carry upload stats and ratio", () => {
+    const [engine, client] = makeEngine()
+    engine.add(MAGNET)
+    const torrent = client.torrents[0]!
+    torrent.progress = 0.5
+    torrent.downloaded = 1000
+    torrent.uploaded = 250
+    expect(engine.snapshots()[0]!.uploadedBytes).toBe(250)
+    expect(engine.snapshots()[0]!.ratio).toBe(0.25)
+  })
+
+  test("selectAll and selectNone bulk-flip selection", () => {
+    const [engine, client] = makeEngine()
+    const key = engine.add(MAGNET)
+    const torrent = client.torrents[0]!
+    const deselectedFiles: string[] = []
+    torrent.files = [
+      { ...makeFakeFile("a.mkv", "/dl/a.mkv", 100), deselect: () => deselectedFiles.push("a") },
+      { ...makeFakeFile("b.srt", "/dl/b.srt", 1), deselect: () => deselectedFiles.push("b") },
+    ]
+    torrent.emit("info")
+    engine.selectNone(key)
+    expect(engine.snapshots()[0]!.files.map((f) => f.selected)).toEqual([false, false])
+    expect(deselectedFiles).toEqual(["a", "b"])
+    engine.selectAll(key)
+    expect(engine.snapshots()[0]!.files.map((f) => f.selected)).toEqual([true, true])
+  })
+
+  test("file snapshots carry per-file progress", () => {
+    const [engine, client] = makeEngine()
+    engine.add(MAGNET)
+    const torrent = client.torrents[0]!
+    torrent.files = [
+      { ...makeFakeFile("a.mkv", "/dl/a.mkv", 100), progress: 0.4 },
+      makeFakeFile("b.srt", "/dl/b.srt", 1),
+    ]
+    torrent.emit("info")
+    expect(engine.snapshots()[0]!.files.map((f) => f.progress)).toEqual([0.4, 0])
+  })
+
+  test("setSequential applies a sliding piece window and advances it", () => {
+    const [engine, client] = makeEngine()
+    const key = engine.add(MAGNET)
+    const torrent = client.torrents[0]!
+    torrent.pieces = new Array(100).fill(null)
+    torrent.bitfield = { get: (index) => torrent.downloadedPieces.has(index) }
+    torrent.downloadedPieces = new Set()
+    engine.setSequential(key, true)
+    expect(torrent.selections).toEqual([{ from: 0, to: 31, priority: 1 }])
+    // first 10 pieces complete; window slides to 10..41
+    for (let i = 0; i < 10; i++) torrent.downloadedPieces.add(i)
+    torrent.emit("download")
+    expect(torrent.selections).toEqual([{ from: 10, to: 41, priority: 1 }])
+    expect(engine.snapshots()[0]!.sequential).toBe(true)
+  })
+
+  test("setSequential(false) restores a full-range selection", () => {
+    const [engine, client] = makeEngine()
+    const key = engine.add(MAGNET)
+    const torrent = client.torrents[0]!
+    torrent.pieces = new Array(100).fill(null)
+    engine.setSequential(key, true)
+    engine.setSequential(key, false)
+    expect(torrent.selections).toEqual([{ from: 0, to: 99, priority: 0 }])
+    expect(engine.snapshots()[0]!.sequential).toBe(false)
   })
 
   test("torrent errors surface in the snapshot", () => {

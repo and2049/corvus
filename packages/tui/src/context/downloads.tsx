@@ -48,6 +48,9 @@ export interface DownloadsStore {
   readonly remove: (key: string, opts?: { deleteData?: boolean }) => Promise<void>
   readonly togglePause: (key: string) => void
   readonly toggleFile: (key: string, index: number) => void
+  readonly selectFiles: (key: string, all: boolean) => void
+  readonly toggleSeed: (key: string) => void
+  readonly toggleSequential: (key: string) => void
   readonly retry: (key: string) => Promise<void>
   readonly magnetFor: (key: string) => string | undefined
   readonly clientError: () => string | undefined
@@ -101,6 +104,7 @@ export function DownloadsProvider(props: {
         name: snapshot?.name ?? key,
         addedAt: addedAt.get(magnet) ?? Date.now(),
         done: snapshot?.state === "done",
+        ...(snapshot?.seeding ? { seed: true } : {}),
         ...(snapshot !== undefined && snapshot.files.length > 0
           ? { deselected: deselectedIndexes(snapshot) }
           : {}),
@@ -237,6 +241,29 @@ export function DownloadsProvider(props: {
     persistNow()
   }
 
+  const selectFiles = (key: string, all: boolean) => {
+    if (key.startsWith("slsk:") || key.startsWith("http:")) return
+    if (all) props.engine.selectAll(key)
+    else props.engine.selectNone(key)
+    tick()
+    persistNow()
+  }
+
+  const toggleSeed = (key: string) => {
+    if (key.startsWith("slsk:") || key.startsWith("http:")) return
+    const seeding = props.engine.snapshots().find((s) => s.key === key)?.seeding
+    props.engine.setSeed(key, !(seeding ?? false))
+    tick()
+    persistNow()
+  }
+
+  const toggleSequential = (key: string) => {
+    if (key.startsWith("slsk:") || key.startsWith("http:")) return
+    const sequential = props.engine.snapshots().find((s) => s.key === key)?.sequential
+    props.engine.setSequential(key, !(sequential ?? false))
+    tick()
+  }
+
   const retry = async (key: string) => {
     if (key.startsWith("slsk:")) await props.slsk?.retry(key)
     else if (key.startsWith("http:")) props.http?.retry(key)
@@ -265,6 +292,9 @@ export function DownloadsProvider(props: {
     remove,
     togglePause,
     toggleFile,
+    selectFiles,
+    toggleSeed,
+    toggleSequential,
     retry,
     magnetFor,
     clientError: () => props.engine.clientError(),

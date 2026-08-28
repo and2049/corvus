@@ -8,6 +8,7 @@ export interface FileSnapshot {
   readonly path: string
   readonly length: number
   readonly selected: boolean
+  readonly progress: number
 }
 
 export interface DownloadSnapshot {
@@ -20,6 +21,10 @@ export interface DownloadSnapshot {
   readonly downloadSpeed: number
   readonly uploadSpeed: number
   readonly peers: number
+  readonly uploadedBytes: number
+  readonly ratio: number
+  readonly seeding: boolean
+  readonly sequential: boolean
   readonly etaSeconds: number | undefined
   readonly fetchingSeconds: number | undefined
   readonly error?: string
@@ -30,7 +35,7 @@ export interface DownloadSnapshot {
 
 export interface TorrentLike {
   readonly infoHash: string
-  name: string
+  name?: string
   readonly progress: number
   readonly downloaded: number
   readonly length: number
@@ -40,6 +45,11 @@ export interface TorrentLike {
   readonly timeRemaining: number
   readonly done: boolean
   readonly paused: boolean
+  readonly uploaded: number
+  readonly pieces: readonly unknown[]
+  readonly bitfield?: { get(index: number): boolean }
+  select(start: number, end: number, priority?: number): void
+  deselect(start: number, end: number): void
 }
 
 export function snapshotFrom(key: string, torrent: TorrentLike): DownloadSnapshot {
@@ -49,7 +59,7 @@ export function snapshotFrom(key: string, torrent: TorrentLike): DownloadSnapsho
       : undefined
   return {
     key,
-    name: torrent.name !== "" ? torrent.name : key,
+    name: typeof torrent.name === "string" && torrent.name !== "" ? torrent.name : key,
     state: torrent.done
       ? "done"
       : torrent.paused
@@ -63,6 +73,10 @@ export function snapshotFrom(key: string, torrent: TorrentLike): DownloadSnapsho
     downloadSpeed: torrent.downloadSpeed,
     uploadSpeed: torrent.uploadSpeed,
     peers: torrent.numPeers,
+    uploadedBytes: torrent.uploaded,
+    ratio: torrent.downloaded > 0 ? torrent.uploaded / torrent.downloaded : 0,
+    seeding: false,
+    sequential: false,
     etaSeconds: eta,
     fetchingSeconds: undefined,
     files: [],
@@ -75,6 +89,9 @@ interface Entry {
   addedAt: number
   torrent?: Torrent
   deselected: ReadonlySet<number>
+  seed: boolean
+  sequential: boolean
+  seqWindow?: { from: number; to: number }
 }
 
 export interface EngineOptions {
@@ -123,7 +140,7 @@ export class Engine {
     this.client.throttleUpload(upload ?? -1)
   }
 
-  add(magnet: string, opts?: { deselected?: readonly number[] }): string {
+  add(magnet: string, opts?: { deselected?: readonly number[]; seed?: boolean; sequential?: boolean }): string {
     const key = infoHashFromMagnet(magnet) ?? magnet
     if (this.entries.has(key)) return key
     const entry: Entry = {
@@ -131,6 +148,8 @@ export class Engine {
       snapshot: emptySnapshot(key),
       addedAt: Date.now(),
       deselected: new Set(opts?.deselected ?? []),
+      seed: opts?.seed ?? this.seedAfterComplete,
+      sequential: opts?.sequential ?? false,
     }
     this.entries.set(key, entry)
     this.attach(key, entry)
@@ -146,23 +165,26 @@ export class Engine {
       return
     }
     entry.torrent = torrent
-    torrent.on("download", () => this.refresh(key, torrent))
+    torrent.on("download", () => {
+      const current = this.entries.get(key)
+      if (current?.sequential === true) this.applySequentialWindow(current)
+      this.refresh(key, torrent)
+    })
     torrent.on("info", () => {
       const current = this.entries.get(key)
       if (current === undefined) return
       for (const index of current.deselected) torrent.files[index]?.deselect()
+      if (current.sequential) this.applySequentialWindow(current)
       this.refresh(key, torrent)
     })
     torrent.on("done", () => {
       this.refresh(key, torrent)
-      if (!this.seedAfterComplete) {
-        torrent.destroy()
-        const current = this.entries.get(key)
-        if (current !== undefined) {
-          current.torrent = undefined
-          current.snapshot = { ...current.snapshot, state: "done", progress: 1 }
-        }
-      }
+      const current = this.entries.get(key)
+      if (current === undefined) return
+      if (current.seed) return
+      torrent.destroy()
+      current.torrent = undefined
+      current.snapshot = { ...current.snapshot, state: "done", progress: 1 }
     })
     torrent.on("error", (err: Error) => {
       const current = this.entries.get(key)
@@ -201,6 +223,82 @@ export class Engine {
     const entry = this.entries.get(key)
     if (entry?.torrent === undefined || entry.snapshot.state === "done") return
     entry.torrent.resume()
+    this.refresh(key, entry.torrent)
+  }
+
+  // Sequential download: replaces the whole-torrent selection with a sliding
+  // window of SEQ_WINDOW pieces starting at the first incomplete piece, so the
+  // swarm fetches pieces in order (streaming-friendly). File-level selection is
+  // not supported while sequential mode is on.
+  setSequential(key: string, value: boolean): void {
+    const entry = this.entries.get(key)
+    if (entry === undefined) return
+    entry.sequential = value
+    const torrent = entry.torrent
+    if (torrent === undefined) return
+    if (value) {
+      this.applySequentialWindow(entry)
+    } else {
+      if (entry.seqWindow !== undefined) {
+        torrent.deselect(entry.seqWindow.from, entry.seqWindow.to)
+        entry.seqWindow = undefined
+      }
+      if (torrent.pieces.length > 0) torrent.select(0, torrent.pieces.length - 1)
+    }
+    this.refresh(key, torrent)
+  }
+
+  private applySequentialWindow(entry: Entry): void {
+    const torrent = entry.torrent
+    if (torrent === undefined) return
+    const last = torrent.pieces.length - 1
+    if (last < 0) return
+    let first = 0
+    const bitfield = torrent.bitfield
+    if (bitfield !== undefined) {
+      while (first < last && bitfield.get(first)) first++
+    }
+    const to = Math.min(first + SEQ_WINDOW - 1, last)
+    if (entry.seqWindow !== undefined && entry.seqWindow.from === first) return
+    if (entry.seqWindow !== undefined) torrent.deselect(entry.seqWindow.from, entry.seqWindow.to)
+    torrent.select(first, to, 1)
+    entry.seqWindow = { from: first, to }
+  }
+
+  // Per-torrent seeding override. Turning seed ON for an already-destroyed done
+  // torrent re-attaches it (webtorrent resumes from the existing data on disk);
+  // turning it OFF on a live done torrent destroys it and parks the entry as done.
+  setSeed(key: string, value: boolean): void {
+    const entry = this.entries.get(key)
+    if (entry === undefined) return
+    entry.seed = value
+    if (value && entry.torrent === undefined && entry.snapshot.state === "done") {
+      this.attach(key, entry)
+      return
+    }
+    if (!value && entry.torrent !== undefined && entry.snapshot.state === "done") {
+      entry.torrent.destroy()
+      entry.torrent = undefined
+      entry.snapshot = { ...entry.snapshot, state: "done", progress: 1, seeding: false }
+    }
+  }
+
+  selectAll(key: string): void {
+    this.setAllFiles(key, false)
+  }
+
+  selectNone(key: string): void {
+    this.setAllFiles(key, true)
+  }
+
+  private setAllFiles(key: string, deselect: boolean): void {
+    const entry = this.entries.get(key)
+    if (entry?.torrent === undefined) return
+    const deselected = new Set<number>(deselect ? entry.torrent.files.map((_, index) => index) : [])
+    entry.torrent.files.forEach((file, index) =>
+      deselected.has(index) ? file.deselect() : file.select(),
+    )
+    entry.deselected = deselected
     this.refresh(key, entry.torrent)
   }
 
@@ -268,17 +366,24 @@ export class Engine {
     const base = snapshotFrom(key, torrent)
     entry.snapshot = {
       ...base,
-      ...(torrent.name !== "" ? { location: path.join(this.options.downloadDir, torrent.name) } : {}),
+      ...(typeof torrent.name === "string" && torrent.name !== ""
+        ? { location: path.join(this.options.downloadDir, torrent.name) }
+        : {}),
       fetchingSeconds: elapsedFetching(base.state, entry.addedAt),
+      seeding: entry.seed,
+      sequential: entry.sequential,
       files: torrent.files.map((file, index) => ({
         name: file.name,
         path: file.path,
         length: file.length,
         selected: !entry.deselected.has(index),
+        progress: file.progress ?? 0,
       })),
     }
   }
 }
+
+const SEQ_WINDOW = 32
 
 function elapsedFetching(state: DownloadSnapshot["state"], addedAt: number): number | undefined {
   return state === "fetching"
@@ -302,6 +407,10 @@ function emptySnapshot(key: string): DownloadSnapshot {
     downloadSpeed: 0,
     uploadSpeed: 0,
     peers: 0,
+    uploadedBytes: 0,
+    ratio: 0,
+    seeding: false,
+    sequential: false,
     etaSeconds: undefined,
     fetchingSeconds: undefined,
     files: [],

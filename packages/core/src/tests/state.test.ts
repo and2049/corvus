@@ -75,10 +75,29 @@ describe("loadDownloads", () => {
     const file = path.join(dir, "downloads.json")
     try {
       const store = new DownloadsFile(file)
-      store.set([{ ...makeDownload("magnet:?xt=urn:btih:" + "ef".repeat(20)), deselected: [1, 3] }])
+      store.set([{ ...makeDownload("magnet:?xt=urn:btih:" + "ef".repeat(20)), deselected: [1, 3], seed: true }])
       await store.close()
       const loaded = await loadDownloads(file)
       expect(loaded[0]!.deselected).toEqual([1, 3])
+      expect(loaded[0]!.seed).toBe(true)
+    } finally {
+      await rm(dir, { recursive: true })
+    }
+  })
+
+  test("skips entries with a non-boolean seed", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "corvus-state-"))
+    const file = path.join(dir, "downloads.json")
+    try {
+      await writeFile(
+        file,
+        JSON.stringify([
+          { magnet: "magnet:?xt=urn:btih:" + "12".repeat(20), name: "bad", addedAt: 1, done: false, seed: "yes" },
+          { magnet: "magnet:?xt=urn:btih:" + "34".repeat(20), name: "good", addedAt: 1, done: false },
+        ]),
+      )
+      const loaded = await loadDownloads(file)
+      expect(loaded.map((entry) => entry.name)).toEqual(["good"])
     } finally {
       await rm(dir, { recursive: true })
     }

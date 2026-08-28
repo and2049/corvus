@@ -178,6 +178,10 @@ export class SoulseekDownloads {
         downloadSpeed: speed,
         uploadSpeed: 0,
         peers: entry.state === "downloading" ? 1 : 0,
+        uploadedBytes: 0,
+        ratio: 0,
+        seeding: false,
+        sequential: false,
         etaSeconds: speed > 0 && remaining > 0 ? Math.round(remaining / speed) : undefined,
         fetchingSeconds:
           entry.state === "fetching" ? Math.max(0, Math.round((now - entry.startedWaitingAt) / 1000)) : undefined,

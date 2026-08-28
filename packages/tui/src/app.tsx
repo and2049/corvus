@@ -1,8 +1,8 @@
-import { createMemo, createSignal, Match, Switch } from "solid-js"
+import { createEffect, createMemo, createSignal, Match, Switch } from "solid-js"
 import { useKeyboard, useRenderer } from "@opentui/solid"
 import { writeToClipboard } from "./clipboard"
 import type { ConfigPatch, CorvusConfig, Engine, HttpDownloads, PersistedDownload, SoulseekDownloads } from "@corvus/core"
-import { ContentFilter, createProviders } from "@corvus/providers"
+import { ContentFilter, createProvidersWithSkipped } from "@corvus/providers"
 import { Shell } from "./component/shell"
 import { ConfigProvider, useConfig } from "./context/config"
 import { DownloadsProvider } from "./context/downloads"
@@ -47,26 +47,33 @@ function AppInner(props: {
   onExit?: () => void
 }) {
   const { config } = useConfig()
-  const providers = createMemo(() => createProviders(config().providers))
+  const report = createMemo(() => createProvidersWithSkipped(config().providers))
   const filter = createMemo(() => new ContentFilter(config().hideNSFW))
 
   return (
-    <SearchProvider providers={providers()} filter={filter()} timeoutMs={config().searchTimeoutMs}>
+    <SearchProvider providers={report().providers} filter={filter()} timeoutMs={config().searchTimeoutMs}>
       <DownloadsProvider engine={props.engine} slsk={props.slsk} http={props.http} persisted={props.persisted} persist={props.persist}>
         <ShellProvider>
-          <Router onExit={props.onExit} />
+          <Router onExit={props.onExit} skipped={report().skipped} />
         </ShellProvider>
       </DownloadsProvider>
     </SearchProvider>
   )
 }
 
-export function Router(props: { onExit?: () => void }) {
+export function Router(props: { onExit?: () => void; skipped?: readonly string[] }) {
   const search = useSearch()
   const shell = useShell()
   const renderer = useRenderer()
   const [route, setRoute] = createSignal<Route>("home")
   const [returnTo, setReturnTo] = createSignal<Route>("home")
+
+  createEffect(() => {
+    const skipped = props.skipped ?? []
+    if (skipped.length > 0) {
+      shell.showNotice(`skipped unknown sources: ${skipped.join(", ")} (check config)`)
+    }
+  })
 
   const open = (target: Route) => {
     setReturnTo(route())
