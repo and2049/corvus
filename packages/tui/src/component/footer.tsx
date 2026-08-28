@@ -44,6 +44,17 @@ export function Footer(props: { route: Route }) {
     }
   })
 
+  // The full hint list lives behind the ctrl+k shortcuts menu; the footer only
+  // shows how to open it plus the route's esc hint (label varies: back/cancel).
+  const visibleHints = createMemo(() => {
+    const esc = shell.hints().find((hint) => hint.key === "esc")
+    const rest = shell.hints().some((hint) => hint.key !== "esc")
+    return [
+      ...(rest ? [{ key: "ctrl+k", label: "shortcuts" }] : []),
+      ...(esc !== undefined ? [esc] : []),
+    ]
+  })
+
   const stats = createMemo(() => {
     const active = (downloads?.snapshots() ?? []).filter((s) => s.state === "downloading")
     if (active.length === 0) return "idle"
@@ -60,7 +71,7 @@ export function Footer(props: { route: Route }) {
         </text>
         <box flexGrow={1} minWidth={1} />
         <box flexDirection="row" flexShrink={0}>
-          <For each={shell.hints()}>
+          <For each={visibleHints()}>
             {(hint, index) => (
               <box flexDirection="row">
                 <Show when={index() > 0}>

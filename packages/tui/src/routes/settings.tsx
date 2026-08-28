@@ -128,6 +128,7 @@ export function Settings(props: { onBack: () => void; onOpenSources: () => void 
   }
 
   useKeyboard((key) => {
+    if (shell.shortcutsOpen()) return
     if (editing() !== undefined) {
       if (key.name === "escape") setEditing(undefined)
       return

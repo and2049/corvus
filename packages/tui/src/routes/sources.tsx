@@ -41,6 +41,7 @@ export function Sources(props: { onBack: () => void }) {
   }
 
   useKeyboard((key) => {
+    if (shell.shortcutsOpen()) return
     if (key.name === "escape") {
       props.onBack()
       return

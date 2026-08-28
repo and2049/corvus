@@ -10,6 +10,8 @@ export interface Hint {
 export interface ShellStore {
   readonly hints: Accessor<readonly Hint[]>
   readonly setHints: (hints: readonly Hint[]) => void
+  readonly shortcutsOpen: Accessor<boolean>
+  readonly setShortcutsOpen: (open: boolean) => void
   readonly overlay: Accessor<(() => JSX.Element) | undefined>
   readonly setOverlay: (overlay: (() => JSX.Element) | undefined) => void
   readonly notice: Accessor<string | undefined>
@@ -21,6 +23,8 @@ export interface ShellStore {
 const NOOP_SHELL: ShellStore = {
   hints: () => [],
   setHints: () => {},
+  shortcutsOpen: () => false,
+  setShortcutsOpen: () => {},
   overlay: () => undefined,
   setOverlay: () => {},
   notice: () => undefined,
@@ -31,6 +35,7 @@ const ShellContext = createContext<ShellStore>(NOOP_SHELL)
 
 export function ShellProvider(props: { children: JSX.Element }) {
   const [hints, setHints] = createSignal<readonly Hint[]>([])
+  const [shortcutsOpen, setShortcutsOpen] = createSignal(false)
   const [overlay, setOverlay] = createSignal<(() => JSX.Element) | undefined>(undefined)
   const [notice, setNotice] = createSignal<string | undefined>(undefined)
   let noticeTimer: ReturnType<typeof setTimeout> | undefined
@@ -39,7 +44,13 @@ export function ShellProvider(props: { children: JSX.Element }) {
   })
   const store: ShellStore = {
     hints,
-    setHints: (next) => setHints(next),
+    // Hints changes (route or mode switches) close a stale shortcuts menu.
+    setHints: (next) => {
+      setHints(next)
+      setShortcutsOpen(false)
+    },
+    shortcutsOpen,
+    setShortcutsOpen,
     overlay,
     setOverlay: (next) => setOverlay(() => next),
     notice,

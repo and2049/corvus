@@ -100,6 +100,14 @@ export function Router(props: { onExit?: () => void; skipped?: readonly string[]
       props.onExit?.()
       return
     }
+    if (key.ctrl && key.name === "k") {
+      if (shell.shortcutsOpen() || shell.hints().length > 0) shell.setShortcutsOpen(!shell.shortcutsOpen())
+      return
+    }
+    if (shell.shortcutsOpen()) {
+      if (key.name === "escape") shell.setShortcutsOpen(false)
+      return
+    }
     if (key.ctrl && key.name === "g") {
       open("settings")
       return

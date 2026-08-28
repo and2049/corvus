@@ -65,6 +65,7 @@ export function Results(props: { onBack: () => void; onDownload: () => void }) {
   onCleanup(() => shell.setOverlay(undefined))
 
   useKeyboard((key) => {
+    if (shell.shortcutsOpen()) return
     if (key.name === "escape") {
       if (preview() !== undefined) {
         setPreview(undefined)

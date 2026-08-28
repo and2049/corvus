@@ -4,6 +4,7 @@ import { Show, type JSX } from "solid-js"
 import { useShell, type Route } from "../context/shell"
 import { theme } from "../theme"
 import { Footer } from "./footer"
+import { ShortcutsDialog } from "./shortcuts-dialog"
 
 export function Shell(props: {
   route: Route
@@ -29,6 +30,9 @@ export function Shell(props: {
       {/* Overlays render last at the root so absolute offsets resolve against the full screen. */}
       <Show keyed when={shell.overlay()}>
         {(overlay) => overlay()}
+      </Show>
+      <Show when={shell.shortcutsOpen()}>
+        <ShortcutsDialog hints={shell.hints()} />
       </Show>
       <Show when={shell.notice()} keyed>
         {(message) => (

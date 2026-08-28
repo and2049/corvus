@@ -40,6 +40,49 @@ describe("Shell notice banner", () => {
     await t.renderer.destroy()
   })
 
+  test("shortcuts menu lists non-esc hints and closes when hints change", async () => {
+    let store: ShellStore | undefined
+    function Capture(): JSX.Element {
+      const shell = useShell()
+      onMount(() => {
+        store = shell
+      })
+      return <text>capture</text>
+    }
+    const t = await testRender(
+      () => (
+        <ShellProvider>
+          <Shell route="downloads">
+            <Capture />
+          </Shell>
+        </ShellProvider>
+      ),
+      { width: 80, height: 24 },
+    )
+    await t.flush()
+    store!.setHints([
+      { key: "p", label: "pause/resume" },
+      { key: "esc", label: "back" },
+    ])
+    await t.flush()
+    const footer = String(t.captureCharFrame())
+    expect(footer).toContain("ctrl+k shortcuts")
+    expect(footer).toContain("esc back")
+    expect(footer.includes("pause/resume")).toBe(false)
+    store!.setShortcutsOpen(true)
+    await t.flush()
+    const open = String(t.captureCharFrame())
+    expect(open).toContain("pause/resume")
+    expect(open).toContain("esc close")
+    store!.setHints([{ key: "esc", label: "back" }])
+    await t.flush()
+    expect(store!.shortcutsOpen()).toBe(false)
+    const closed = String(t.captureCharFrame())
+    expect(closed.includes("esc close")).toBe(false)
+    expect(closed.includes("ctrl+k shortcuts")).toBe(false)
+    await t.renderer.destroy()
+  })
+
   test("a new notice replaces a pending one", async () => {
     let store: ShellStore | undefined
     function Capture(): JSX.Element {
