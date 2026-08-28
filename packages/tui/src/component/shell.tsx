@@ -18,6 +18,7 @@ export function Shell(props: {
       width={dims().width}
       height={dims().height}
       flexDirection="column"
+      backgroundColor={theme.bg}
       onMouseDown={(evt) => {
         if (evt.button !== MouseButton.RIGHT) return
         props.onCopySelection?.()

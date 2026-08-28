@@ -416,7 +416,7 @@ describe("App", () => {
     t.mockInput.pressKey("g", { ctrl: true })
     await t.flush()
     expect(t.captureCharFrame()).toContain("download dir")
-    for (let i = 0; i < 9; i += 1) t.mockInput.pressArrow("down")
+    for (let i = 0; i < 10; i += 1) t.mockInput.pressArrow("down")
     await t.flush()
     t.mockInput.pressEnter()
     await t.flush()

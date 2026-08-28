@@ -13,6 +13,7 @@ import { Results } from "./routes/results"
 import { Downloads } from "./routes/downloads"
 import { Settings } from "./routes/settings"
 import { Sources } from "./routes/sources"
+import { theme } from "./theme"
 
 export function App(props: {
   config: CorvusConfig
@@ -67,6 +68,8 @@ export function Router(props: { onExit?: () => void; skipped?: readonly string[]
   const renderer = useRenderer()
   const [route, setRoute] = createSignal<Route>("home")
   const [stack, setStack] = createSignal<readonly Route[]>([])
+
+  createEffect(() => renderer.setBackgroundColor(theme.bg))
 
   createEffect(() => {
     const skipped = props.skipped ?? []

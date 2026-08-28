@@ -29,11 +29,14 @@ export interface YtDlpConfig {
   readonly audioFormat?: string
 }
 
+export type ThemeMode = "dark" | "light"
+
 export interface CorvusConfig {
   readonly downloadDir: string
   readonly seedAfterComplete: boolean
   readonly searchTimeoutMs: number
   readonly hideNSFW: boolean
+  readonly theme: ThemeMode
   readonly proxy?: string
   readonly torrentPort?: number
   readonly maxConns?: number
@@ -50,6 +53,7 @@ export function defaultConfig(): CorvusConfig {
     seedAfterComplete: false,
     searchTimeoutMs: 15_000,
     hideNSFW: true,
+    theme: "dark",
     providers: {
       knaben: { enabled: true },
       yts: { enabled: true },

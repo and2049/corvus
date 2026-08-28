@@ -56,6 +56,33 @@ describe("Settings", () => {
     await t.renderer.destroy()
   })
 
+  test("theme row toggles between dark and light and persists", async () => {
+    const patches: ConfigPatch[] = []
+    const t = await testRender(
+      () => (
+        <ConfigProvider engine={fakeEngine} initial={defaultConfig()} persist={(p) => patches.push(p)}>
+          <Settings onBack={() => {}} onOpenSources={() => {}} />
+        </ConfigProvider>
+      ),
+      { width: 100, height: 30 },
+    )
+    await t.flush()
+    // rows: downloadDir, seed, torrentPort, maxConns, downloadLimit, uploadLimit, proxy, hideNSFW, theme
+    for (let i = 0; i < 8; i += 1) {
+      t.mockInput.pressArrow("down")
+      await t.flush()
+    }
+    expect(t.captureCharFrame()).toContain("dark")
+    t.mockInput.pressEnter()
+    await t.flush()
+    expect(patches).toEqual([{ theme: "light" }])
+    expect(t.captureCharFrame()).toContain("light")
+    t.mockInput.pressEnter()
+    await t.flush()
+    expect(patches).toEqual([{ theme: "light" }, { theme: "dark" }])
+    await t.renderer.destroy()
+  })
+
   test("download limit row parses a human size and persists bytes", async () => {
     const patches: ConfigPatch[] = []
     const t = await testRender(

@@ -34,6 +34,7 @@ const ROWS: readonly Row[] = [
   { key: "uploadLimit", label: "upload limit", kind: "size", note: "applies now · e.g. 1048576 or 1MB · empty = unlimited" },
   { key: "proxy", label: "search proxy", kind: "text", note: "applies now · search traffic only, not BT peers" },
   { key: "hideNSFW", label: "hide nsfw", kind: "toggle", note: "applies now" },
+  { key: "theme", label: "theme", kind: "toggle", note: "applies now" },
   { key: "searchTimeoutMs", label: "search timeout (ms)", kind: "int", note: "applies now" },
   { key: "sources", label: "sources »", kind: "nav", note: "enable/disable search sources" },
 ]
@@ -80,6 +81,8 @@ export function Settings(props: { onBack: () => void; onOpenSources: () => void 
         return c.proxy !== undefined && c.proxy !== "" ? c.proxy : "(none)"
       case "hideNSFW":
         return c.hideNSFW ? "on" : "off"
+      case "theme":
+        return c.theme
       case "searchTimeoutMs":
         return String(c.searchTimeoutMs)
       case "sources":
@@ -103,6 +106,10 @@ export function Settings(props: { onBack: () => void; onOpenSources: () => void 
       return
     }
     if (row.kind === "toggle") {
+      if (row.key === "theme") {
+        update({ theme: config().theme === "dark" ? "light" : "dark" })
+        return
+      }
       update({ [row.key]: !(config()[row.key as "seedAfterComplete" | "hideNSFW"] ?? false) })
       return
     }
