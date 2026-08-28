@@ -4,6 +4,7 @@ export const theme = {
   muted: "#808080",
   dim: "#666666",
   borderMuted: "#505050",
+  elevatedBg: "#1a1a1a",
   selectedBg: "#3a3a4a",
   success: "#b5bd68",
   warning: "#ffff00",

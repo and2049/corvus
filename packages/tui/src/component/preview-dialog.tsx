@@ -1,28 +1,13 @@
-import { useTerminalDimensions } from "@opentui/solid"
 import { Show } from "solid-js"
 import type { TorrentResult } from "@corvus/providers"
 import { formatSize } from "../format"
 import { seedColor, theme } from "../theme"
+import { Dialog } from "./dialog"
 
 export function PreviewDialog(props: { result: TorrentResult }) {
-  const dims = useTerminalDimensions()
   const r = () => props.result
   return (
-    <box
-      position="absolute"
-      top={Math.floor(dims().height * 0.25)}
-      left={Math.floor(dims().width * 0.1)}
-      width={Math.floor(dims().width * 0.8)}
-      zIndex={10}
-      flexDirection="column"
-      border
-      borderStyle="rounded"
-      borderColor={theme.accent}
-      backgroundColor="#000000"
-      padding={1}
-      gap={0}
-    >
-      <text fg={theme.accent}>{r().slsk !== undefined ? "download this file?" : "download this torrent?"}</text>
+    <Dialog title={r().slsk !== undefined ? "download this file?" : "download this torrent?"} width={88}>
       <text fg={theme.text} wrapMode="none" truncate>
         {r().title}
       </text>
@@ -64,8 +49,8 @@ export function PreviewDialog(props: { result: TorrentResult }) {
         )}
       </Show>
       <text fg={theme.dim} paddingTop={1}>
-        enter download · esc cancel
+        enter download
       </text>
-    </box>
+    </Dialog>
   )
 }

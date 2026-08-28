@@ -4,6 +4,7 @@ import { createEffect, createMemo, For, Show } from "solid-js"
 import type { YtDlpFormat, YtDlpInfo } from "@corvus/core"
 import { formatBytes } from "@corvus/providers"
 import { theme } from "../theme"
+import { Dialog } from "./dialog"
 
 export interface AudioFormatChoice {
   readonly format: string
@@ -90,22 +91,7 @@ export function FormatDialog(props: {
   })
 
   return (
-    <box
-      position="absolute"
-      top={Math.floor(dims().height * 0.15)}
-      left={Math.floor(dims().width * 0.1)}
-      width={Math.floor(dims().width * 0.8)}
-      zIndex={10}
-      flexDirection="column"
-      border
-      borderStyle="rounded"
-      borderColor={theme.accent}
-      backgroundColor="#000000"
-      padding={1}
-    >
-      <box flexDirection="row" gap={1}>
-        <text fg={theme.accent}>{props.audio() ? "extract audio" : "choose a format"}</text>
-      </box>
+    <Dialog title={props.audio() ? "extract audio" : "choose a format"} width={88} top={0.15}>
       <text fg={theme.text} wrapMode="none" truncate>
         {props.info.title}
       </text>
@@ -182,12 +168,12 @@ export function FormatDialog(props: {
         </scrollbox>
       </box>
       <text fg={theme.dim} flexShrink={0}>
-        <Show when={props.audio()} fallback="enter download · a extract audio · esc cancel">
+        <Show when={props.audio()} fallback="enter download · a extract audio">
           {audioChoice()?.kind === "lossy"
-            ? "enter extract audio · ←/→ quality · a video · esc cancel"
-            : "enter extract audio · a video · esc cancel"}
+            ? "enter extract audio · ←/→ quality · a video"
+            : "enter extract audio · a video"}
         </Show>
       </text>
-    </box>
+    </Dialog>
   )
 }

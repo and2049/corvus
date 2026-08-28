@@ -42,7 +42,7 @@ export function Shell(props: {
             right={2}
             border={["left", "right"]}
             borderColor={theme.accent}
-            backgroundColor="#1a1a1a"
+            backgroundColor={theme.elevatedBg}
             paddingLeft={2}
             paddingRight={2}
           >
