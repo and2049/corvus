@@ -61,6 +61,7 @@ function sortSnapshots(list: readonly DownloadSnapshot[], mode: number): Downloa
 }
 
 const stateColor = (snapshot: DownloadSnapshot): string => {
+  if (snapshot.seeding) return theme.success
   switch (snapshot.state) {
     case "done":
       return theme.success
@@ -136,6 +137,7 @@ export function Downloads(props: { onBack: () => void }) {
   createEffect(() => shell.setHints(openKey() === undefined ? LIST_HINTS : FILES_HINTS))
 
   useKeyboard((key) => {
+    if (shell.shortcutsOpen()) return
     if (key.name === "escape") {
       if (openKey() !== undefined) {
         setOpenKey(undefined)
@@ -176,65 +178,47 @@ export function Downloads(props: { onBack: () => void }) {
       moveCursor(1)
       return
     }
-    if (key.name === "p" && !key.ctrl) {
-      const selected = selectedSnapshot()
-      if (selected !== undefined) downloads.togglePause(selected.key)
-      return
-    }
-    if (key.name === "s" && !key.ctrl) {
-      const selected = selectedSnapshot()
-      if (selected !== undefined) downloads.toggleSeed(selected.key)
-      return
-    }
-    if (key.name === "q" && !key.ctrl) {
-      const selected = selectedSnapshot()
-      if (selected !== undefined) downloads.toggleSequential(selected.key)
-      return
-    }
-    if (key.name === "a" && !key.ctrl) {
+    if (key.ctrl) return
+    if (key.name === "a") {
       setSortMode((mode) => (mode + 1) % SORT_MODES.length)
       return
     }
-    if (key.name === "return") {
-      const selected = selectedSnapshot()
-      if (selected !== undefined && selected.files.length > 0) {
-        setFileCursor(0)
-        setOpenKey(selected.key)
+    const selected = selectedSnapshot()
+    if (selected === undefined) return
+    if (key.name === "R" || (key.name === "r" && key.shift)) {
+      deleteWithData(selected.key)
+      return
+    }
+    switch (key.name) {
+      case "p":
+        return downloads.togglePause(selected.key)
+      case "s":
+        return downloads.toggleSeed(selected.key)
+      case "q":
+        return downloads.toggleSequential(selected.key)
+      case "t":
+        return void downloads.retry(selected.key)
+      case "r":
+        return void downloads.remove(selected.key)
+      case "return":
+        if (selected.files.length > 0) {
+          setFileCursor(0)
+          setOpenKey(selected.key)
+        }
+        return
+      case "o":
+        if (selected.location === undefined) return
+        return void revealPath(selected.location).then((ok) => {
+          if (!ok) shell.showNotice("could not open location")
+        })
+      case "c": {
+        const link = downloads.magnetFor(selected.key)
+        if (link === undefined) return
+        void writeToClipboard(link, { renderer }).then(
+          (ok) => shell.showNotice(ok ? "Copied to clipboard" : "Copy failed"),
+          () => shell.showNotice("Copy failed"),
+        )
       }
-      return
-    }
-    if (key.name === "t" && !key.ctrl) {
-      const selected = selectedSnapshot()
-      if (selected !== undefined) void downloads.retry(selected.key)
-      return
-    }
-    if ((key.name === "R" || (key.name === "r" && key.shift)) && !key.ctrl) {
-      const selected = selectedSnapshot()
-      if (selected !== undefined) deleteWithData(selected.key)
-      return
-    }
-    if (key.name === "r" && !key.ctrl) {
-      const selected = selectedSnapshot()
-      if (selected !== undefined) void downloads.remove(selected.key)
-      return
-    }
-    if (key.name === "o" && !key.ctrl) {
-      const location = selectedSnapshot()?.location
-      if (location === undefined) return
-      void revealPath(location).then((ok) => {
-        if (!ok) shell.showNotice("could not open location")
-      })
-      return
-    }
-    if (key.name === "c" && !key.ctrl) {
-      const selected = selectedSnapshot()
-      if (selected === undefined) return
-      const link = downloads.magnetFor(selected.key)
-      if (link === undefined) return
-      void writeToClipboard(link, { renderer }).then(
-        (ok) => shell.showNotice(ok ? "Copied to clipboard" : "Copy failed"),
-        () => shell.showNotice("Copy failed"),
-      )
     }
   })
 
@@ -274,7 +258,7 @@ export function Downloads(props: { onBack: () => void }) {
                       {String(Math.round(snapshot.progress * 100)).padStart(3)}%
                     </text>
                     <text
-                      fg={selected() ? theme.accent : theme.text}
+                      fg={snapshot.seeding ? theme.success : selected() ? theme.accent : theme.text}
                       truncate
                       flexGrow={1}
                       flexShrink={1}
