@@ -4,7 +4,7 @@ import { formatBytes } from "@corvus/providers"
 import { useConfigOptional } from "../context/config"
 import { useDownloadsOptional } from "../context/downloads"
 import { useSearchOptional } from "../context/search"
-import { useShell, type Route } from "../context/shell"
+import { menuHints, useShell, type Route } from "../context/shell"
 import { theme } from "../theme"
 import { CORVUS_VERSION } from "../version"
 
@@ -45,13 +45,12 @@ export function Footer(props: { route: Route }) {
   })
 
   // The full hint list lives behind the ctrl+k shortcuts menu; the footer only
-  // shows how to open it plus the route's esc hint (label varies: back/cancel).
+  // shows how to open it plus esc and pinned hints (e.g. home's mode toggle).
   const visibleHints = createMemo(() => {
-    const esc = shell.hints().find((hint) => hint.key === "esc")
-    const rest = shell.hints().some((hint) => hint.key !== "esc")
+    const hints = shell.hints()
     return [
-      ...(rest ? [{ key: "ctrl+k", label: "shortcuts" }] : []),
-      ...(esc !== undefined ? [esc] : []),
+      ...(menuHints(hints).length > 0 ? [{ key: "ctrl+k", label: "shortcuts" }] : []),
+      ...hints.filter((hint) => hint.pinned === true || hint.key === "esc"),
     ]
   })
 

@@ -1,6 +1,6 @@
 import { type InputRenderable, TextAttributes } from "@opentui/core"
 import { useKeyboard } from "@opentui/solid"
-import { createSignal, For, onCleanup, onMount } from "solid-js"
+import { createEffect, createSignal, For, onCleanup, onMount } from "solid-js"
 import type { YtDlpInfo } from "@corvus/core"
 import { APP_VERSION, providerCounts } from "../component/footer"
 import { AUDIO_FORMATS, AUDIO_QUALITIES, FormatDialog, audioFormatIndex } from "../component/format-dialog"
@@ -16,6 +16,13 @@ const HOME_HINTS: readonly Hint[] = [
   { key: "ctrl+g", label: "settings" },
   { key: "ctrl+f", label: "sources" },
   { key: "ctrl+shift+c", label: "copy selection" },
+]
+
+const INSERT_HINTS: readonly Hint[] = [{ key: "esc", label: "normal" }]
+
+const NORMAL_HINTS: readonly Hint[] = [
+  { key: "d", label: "downloads" },
+  { key: "i", label: "insert", pinned: true },
 ]
 
 type Mode = "search" | "magnet" | "http"
@@ -48,6 +55,7 @@ export function Home(props: {
   const config = useConfigOptional()
   const downloads = useDownloadsOptional()
   const [mode, setMode] = createSignal<Mode>("search")
+  const [normal, setNormal] = createSignal(false)
   const [resolving, setResolving] = createSignal(false)
   const [picker, setPicker] = createSignal<YtDlpInfo | undefined>(undefined)
   const [pickerCursor, setPickerCursor] = createSignal(0)
@@ -56,10 +64,8 @@ export function Home(props: {
   const [audioQuality, setAudioQuality] = createSignal(0)
   let input: InputRenderable | undefined
 
-  onMount(() => {
-    shell.setHints([])
-    input?.focus()
-  })
+  onMount(() => input?.focus())
+  createEffect(() => shell.setHints(normal() ? NORMAL_HINTS : INSERT_HINTS))
   onCleanup(() => shell.setOverlay(undefined))
 
   // The home input keeps focus, so while the picker is up we blur it and drive
@@ -92,7 +98,9 @@ export function Home(props: {
     // synchronous input.focus() here would deliver this very Enter to the input
     // too - re-firing onSubmit, re-probing the URL and reopening the picker
     // after Home has unmounted (leaving no esc handler to dismiss it).
-    queueMicrotask(() => input?.focus())
+    queueMicrotask(() => {
+      if (!normal()) input?.focus()
+    })
   }
 
   const choose = (info: YtDlpInfo) => {
@@ -122,6 +130,7 @@ export function Home(props: {
   }
 
   useKeyboard((key) => {
+    if (shell.shortcutsOpen()) return
     const info = picker()
     if (info !== undefined) {
       if (key.name === "escape") {
@@ -140,6 +149,23 @@ export function Home(props: {
       } else if (key.name === "down") {
         setPickerCursor((c) => Math.min(Math.max(info.formats.length - 1, 0), c + 1))
       }
+      return
+    }
+    if (normal()) {
+      if (key.ctrl) return
+      if (key.name === "i") {
+        setNormal(false)
+        // Deferred for the same reason as closePicker: a synchronous focus
+        // would deliver this very "i" to the input.
+        queueMicrotask(() => input?.focus())
+      } else if (key.name === "d") {
+        props.onDownload?.()
+      }
+      return
+    }
+    if (key.name === "escape") {
+      setNormal(true)
+      input?.blur()
       return
     }
     if (key.name === "tab" && !key.ctrl && !key.shift) {
@@ -217,7 +243,7 @@ export function Home(props: {
       <box flexDirection="column" flexShrink={0}>
         <HRule />
         <box flexDirection="row" gap={1}>
-          <text fg={MODES[mode()].accent ? theme.accent : theme.muted}>{MODES[mode()].label}</text>
+          <text fg={normal() ? theme.dim : MODES[mode()].accent ? theme.accent : theme.muted}>{MODES[mode()].label}</text>
           <input
             ref={(el: InputRenderable) => {
               input = el
@@ -228,7 +254,7 @@ export function Home(props: {
             onSubmit={(value: unknown) => void submit(value)}
             placeholder={MODES[mode()].placeholder}
             placeholderColor={theme.dim}
-            textColor={theme.text}
+            textColor={normal() ? theme.dim : theme.text}
             focusedTextColor={theme.text}
             cursorColor={theme.accent}
           />

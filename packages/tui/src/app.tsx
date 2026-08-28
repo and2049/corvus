@@ -7,7 +7,7 @@ import { Shell } from "./component/shell"
 import { ConfigProvider, useConfig } from "./context/config"
 import { DownloadsProvider } from "./context/downloads"
 import { SearchProvider, useSearch } from "./context/search"
-import { ShellProvider, useShell, type Route } from "./context/shell"
+import { menuHints, ShellProvider, useShell, type Route } from "./context/shell"
 import { Home } from "./routes/home"
 import { Results } from "./routes/results"
 import { Downloads } from "./routes/downloads"
@@ -101,11 +101,13 @@ export function Router(props: { onExit?: () => void; skipped?: readonly string[]
       return
     }
     if (key.ctrl && key.name === "k") {
-      if (shell.shortcutsOpen() || shell.hints().length > 0) shell.setShortcutsOpen(!shell.shortcutsOpen())
+      if (shell.shortcutsOpen() || menuHints(shell.hints()).length > 0) shell.setShortcutsOpen(!shell.shortcutsOpen())
       return
     }
     if (shell.shortcutsOpen()) {
-      if (key.name === "escape") shell.setShortcutsOpen(false)
+      // Deferred so route handlers later in this same keypress dispatch still
+      // see the menu open and ignore the esc.
+      if (key.name === "escape") queueMicrotask(() => shell.setShortcutsOpen(false))
       return
     }
     if (key.ctrl && key.name === "g") {

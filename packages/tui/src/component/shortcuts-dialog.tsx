@@ -1,13 +1,13 @@
 import { useTerminalDimensions } from "@opentui/solid"
 import { For } from "solid-js"
-import type { Hint } from "../context/shell"
+import { menuHints, type Hint } from "../context/shell"
 import { theme } from "../theme"
 
 const WIDTH = 34
 
 export function ShortcutsDialog(props: { hints: readonly Hint[] }) {
   const dims = useTerminalDimensions()
-  const rows = () => props.hints.filter((hint) => hint.key !== "esc")
+  const rows = () => menuHints(props.hints)
   return (
     <box
       position="absolute"

@@ -5,6 +5,12 @@ export type Route = "home" | "results" | "downloads" | "settings" | "sources"
 export interface Hint {
   readonly key: string
   readonly label: string
+  readonly pinned?: boolean
+}
+
+// Hints behind the ctrl+k menu; esc and pinned hints render in the footer instead.
+export function menuHints(hints: readonly Hint[]): readonly Hint[] {
+  return hints.filter((hint) => hint.key !== "esc" && hint.pinned !== true)
 }
 
 export interface ShellStore {
