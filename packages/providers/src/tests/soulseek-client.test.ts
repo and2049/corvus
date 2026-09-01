@@ -247,3 +247,48 @@ describe("SoulseekClient peer connections", () => {
     expect(Date.now() - started).toBeGreaterThanOrEqual(90)
   })
 })
+
+describe("SoulseekClient login handling", () => {
+  test("a rejected login is cached until the credentials change", async () => {
+    let logins = 0
+    const server = net.createServer((socket) => {
+      socket.on("data", () => {
+        logins += 1
+        socket.write(frame(codeBody(1, new Writer().bool(false).string("INVALIDPASS").build())))
+      })
+    })
+    await new Promise<void>((done) => server.listen(0, "127.0.0.1", () => done()))
+    cleanups.push(() => new Promise<void>((done) => server.close(() => done())))
+    const address = server.address()
+    const port = typeof address === "object" && address !== null ? address.port : 0
+    const client = new SoulseekClient()
+    cleanups.push(() => client.disconnect())
+    const creds = { username: "me", password: "wrong", host: "127.0.0.1", port, listenPort: 0 }
+
+    const first = await client.connect(creds)
+    expect(first.success).toBe(false)
+    expect(first.rejectionReason).toBe("INVALIDPASS")
+    const second = await client.connect(creds)
+    expect(second).toEqual(first)
+    expect(logins).toBe(1)
+
+    const third = await client.connect({ ...creds, password: "other" })
+    expect(third.success).toBe(false)
+    expect(logins).toBe(2)
+  })
+
+  test("connecting with different credentials while logged in re-logs in", async () => {
+    const { client, server } = await connectedClient()
+    const loginCount = () => server.received.filter((payload) => payload.readUInt32LE(0) === SERVER_CODES.LOGIN).length
+    expect(loginCount()).toBe(1)
+
+    const same = await client.connect({ username: "me", password: "pw", host: "127.0.0.1", port: server.port, listenPort: 0 })
+    expect(same.success).toBe(true)
+    expect(loginCount()).toBe(1)
+
+    const changed = await client.connect({ username: "other", password: "pw2", host: "127.0.0.1", port: server.port, listenPort: 0 })
+    expect(changed.success).toBe(true)
+    expect(client.username).toBe("other")
+    expect(loginCount()).toBe(2)
+  })
+})

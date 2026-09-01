@@ -56,8 +56,9 @@ providers:
   nyaa: { enabled: true }          # baseUrl override supported
   eztv: { enabled: true }
   x1337: { enabled: true }         # baseUrls: [mirror, ...] override supported
-  soulseek:                        # search-only for now; needs an account (new
-    enabled: false                 # username/password auto-registers on login)
+  soulseek:                        # search + downloads; needs an account (an unused
+    enabled: false                 # username/password registers one on first login;
+                                   # also editable in-app under ctrl+g settings)
     username: ""
     password: ""
     listenPort: 2234               # must be reachable inbound for results (forward it)

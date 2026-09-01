@@ -135,3 +135,83 @@ describe("Settings", () => {
     await t.renderer.destroy()
   })
 })
+
+describe("Settings soulseek credentials", () => {
+  const openRow = async (t: Awaited<ReturnType<typeof testRender>>, index: number) => {
+    for (let i = 0; i < index; i += 1) {
+      t.mockInput.pressArrow("down")
+      await t.flush()
+    }
+    t.mockInput.pressEnter()
+    await t.flush()
+  }
+
+  test("username row persists under providers.soulseek and shows the value", async () => {
+    const patches: ConfigPatch[] = []
+    const t = await testRender(
+      () => (
+        <ConfigProvider engine={fakeEngine} initial={defaultConfig()} persist={(p) => patches.push(p)}>
+          <Settings onBack={() => {}} onOpenSources={() => {}} />
+        </ConfigProvider>
+      ),
+      { width: 100, height: 30 },
+    )
+    await t.flush()
+    expect(t.captureCharFrame()).toContain("soulseek username")
+    await openRow(t, 10)
+    t.mockInput.typeText("crow")
+    await t.flush()
+    t.mockInput.pressEnter()
+    await t.flush()
+    expect(patches).toEqual([{ providers: { soulseek: { username: "crow" } } }])
+    expect(t.captureCharFrame()).toContain("crow")
+    await t.renderer.destroy()
+  })
+
+  test("password row starts empty, persists raw and renders masked", async () => {
+    const patches: ConfigPatch[] = []
+    const t = await testRender(
+      () => (
+        <ConfigProvider engine={fakeEngine} initial={defaultConfig()} persist={(p) => patches.push(p)}>
+          <Settings onBack={() => {}} onOpenSources={() => {}} />
+        </ConfigProvider>
+      ),
+      { width: 100, height: 30 },
+    )
+    await t.flush()
+    await openRow(t, 11)
+    t.mockInput.typeText("s3cret")
+    await t.flush()
+    t.mockInput.pressEnter()
+    await t.flush()
+    expect(patches).toEqual([{ providers: { soulseek: { password: "s3cret" } } }])
+    const frame = t.captureCharFrame()
+    expect(frame).toContain("******")
+    expect(frame).not.toContain("s3cret")
+    await t.renderer.destroy()
+  })
+})
+
+describe("Sources soulseek guard", () => {
+  test("flags soulseek as not configured until credentials exist", async () => {
+    const patches: ConfigPatch[] = []
+    const t = await testRender(
+      () => (
+        <ConfigProvider engine={fakeEngine} initial={defaultConfig()} persist={(p) => patches.push(p)}>
+          <Sources onBack={() => {}} />
+        </ConfigProvider>
+      ),
+      { width: 100, height: 30 },
+    )
+    await t.flush()
+    expect(t.captureCharFrame()).toMatch(/soulseek\s+not configured/)
+    for (let i = 0; i < 5; i += 1) {
+      t.mockInput.pressArrow("down")
+      await t.flush()
+    }
+    t.mockInput.pressEnter()
+    await t.flush()
+    expect(patches).toEqual([{ providers: { soulseek: { enabled: true } } }])
+    await t.renderer.destroy()
+  })
+})

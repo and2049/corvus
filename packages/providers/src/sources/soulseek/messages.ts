@@ -32,6 +32,7 @@ export const TRANSFER_DIRECTION_UPLOAD = 1
 export interface LoginResponse {
   readonly success: boolean
   readonly rejectionReason?: string
+  readonly rejectionDetail?: string
   readonly banner?: string
   readonly ipAddress?: string
 }
@@ -109,7 +110,10 @@ export function decodeLogin(payload: Buffer): LoginResponse {
   const reader = new Reader(payload)
   reader.u32() // code
   if (!reader.bool()) {
-    return { success: false, rejectionReason: reader.string() }
+    const rejectionReason = reader.string()
+    return reader.hasRemaining()
+      ? { success: false, rejectionReason, rejectionDetail: reader.string() }
+      : { success: false, rejectionReason }
   }
   const banner = reader.string()
   const ipAddress = reader.ip()

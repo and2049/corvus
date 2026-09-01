@@ -82,6 +82,9 @@ export class SoulseekClient {
   private activeSearches = new Map<number, PendingSearch>()
   private options: SoulseekOptions | undefined
   private connecting: Promise<LoginResponse> | undefined
+  // The last credentials the server rejected: identical retries are answered
+  // locally so a misconfigured account never hammers the server on every search.
+  private rejected: { readonly username: string; readonly password: string; readonly response: LoginResponse } | undefined
   private peerSessions = new Map<string, PeerSession>()
   private pendingPierce = new Map<number, PendingPierce>()
   private fileConnWaiters = new Map<number, FileConnWaiter>()
@@ -100,13 +103,24 @@ export class SoulseekClient {
     return this.options?.username ?? ""
   }
 
+  private sameCredentials(
+    a: { readonly username: string; readonly password: string },
+    b: { readonly username: string; readonly password: string } | undefined,
+  ): boolean {
+    return b !== undefined && a.username === b.username && a.password === b.password
+  }
+
   get listeningPort(): number | undefined {
     const address = this.listener?.address()
     return typeof address === "object" && address !== null ? address.port : undefined
   }
 
   async connect(options: SoulseekOptions): Promise<LoginResponse> {
-    if (this.state === "logged-in") return { success: true }
+    if (this.state === "logged-in") {
+      if (this.sameCredentials(options, this.options)) return { success: true }
+      await this.disconnect()
+    }
+    if (this.rejected !== undefined && this.sameCredentials(options, this.rejected)) return this.rejected.response
     if (this.connecting !== undefined) return this.connecting
     this.connecting = this.doConnect(options)
     try {
@@ -122,9 +136,13 @@ export class SoulseekClient {
     try {
       const response = await this.login(options)
       if (!response.success) {
+        this.rejected = { username: options.username, password: options.password, response }
         this.state = "disconnected"
+        this.serverSocket?.destroy()
+        this.serverSocket = undefined
         return response
       }
+      this.rejected = undefined
       await this.startListener(options.listenPort ?? DEFAULT_LISTEN_PORT)
       this.write(encodeSetWaitPort(options.listenPort ?? DEFAULT_LISTEN_PORT))
       this.state = "logged-in"

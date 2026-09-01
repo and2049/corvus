@@ -1,6 +1,7 @@
 import type { ScrollBoxRenderable } from "@opentui/core"
 import { useKeyboard } from "@opentui/solid"
 import { createEffect, createMemo, createSignal, For, onMount } from "solid-js"
+import { NOT_CONFIGURED, validateCredentials } from "@corvus/providers"
 import { useConfig } from "../context/config"
 import { useShell, type Hint } from "../context/shell"
 import { theme } from "../theme"
@@ -38,6 +39,13 @@ export function Sources(props: { onBack: () => void }) {
     if (name === undefined) return
     const current = isEnabled(config().providers[name]?.enabled)
     update({ providers: { [name]: { enabled: !current } } })
+    if (!current && needsCredentials(name)) shell.showNotice("soulseek needs a username and password - ctrl+g settings")
+  }
+
+  const needsCredentials = (name: string): boolean => {
+    const entry = config().providers[name]
+    const isSlsk = name === "soulseek" || entry?.type === "soulseek"
+    return isSlsk && validateCredentials(entry?.username ?? "", entry?.password ?? "") === NOT_CONFIGURED
   }
 
   useKeyboard((key) => {
@@ -95,6 +103,7 @@ export function Sources(props: { onBack: () => void }) {
                   </text>
                   <text fg={selected() ? theme.accent : theme.text}>{name}</text>
                   <text fg={theme.dim}>{entry()?.type !== undefined ? `(${entry()!.type})` : ""}</text>
+                  <text fg={theme.warning}>{needsCredentials(name) ? "not configured" : ""}</text>
                 </box>
               )
             }}

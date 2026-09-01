@@ -1,5 +1,6 @@
 import { Effect } from "effect"
 import type { SoulseekClient } from "./client"
+import { describeLoginRejection, validateCredentials } from "./credentials"
 import type { SlskSearchResponse } from "./messages"
 import { sharedSoulseekClient } from "./transfers"
 import { ProviderError, type Provider, type TorrentResult } from "../../provider"
@@ -28,23 +29,18 @@ export class Soulseek implements Provider {
   search(query: string): Effect.Effect<readonly TorrentResult[], ProviderError> {
     const q = query.trim()
     if (q === "") return Effect.succeed([])
+    const invalid = validateCredentials(this.credentials.username, this.credentials.password)
+    if (invalid !== undefined) return Effect.fail(new ProviderError({ provider: this.name, message: invalid }))
     return Effect.tryPromise({
       try: async () => {
-        if (this.client.connectionState !== "logged-in") {
-          const response = await this.client.connect({ ...this.credentials })
-          if (!response.success) {
-            // INVALIDPASS means the username exists with a different password; a
-            // first-time login with an unused username registers the account.
-            const hint =
-              response.rejectionReason === "INVALIDPASS"
-                ? "username taken or wrong password (an unused username would have been registered)"
-                : (response.rejectionReason ?? "unknown reason")
-            throw new Error(`login rejected: ${hint}`)
-          }
+        const response = await this.client.connect({ ...this.credentials })
+        if (!response.success) {
+          throw new Error(describeLoginRejection(response.rejectionReason, response.rejectionDetail))
         }
         return await this.client.search(q)
       },
-      catch: (cause): ProviderError => new ProviderError({ provider: this.name, message: String(cause) }),
+      catch: (cause): ProviderError =>
+        new ProviderError({ provider: this.name, message: cause instanceof Error ? cause.message : String(cause) }),
     }).pipe(Effect.map((responses) => responses.flatMap(toResults)))
   }
 }

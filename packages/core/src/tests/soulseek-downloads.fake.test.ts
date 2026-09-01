@@ -267,3 +267,15 @@ describe("SoulseekDownloads", () => {
     expect(transfer.started).toHaveLength(1)
   })
 })
+
+describe("SoulseekDownloads credentials", () => {
+  test("setCredentials makes a previously unconfigured manager downloadable", async () => {
+    const { manager, transfer } = makeManager({ credentials: {} })
+    expect(manager.canDownload()).toBe(false)
+    manager.setCredentials({ username: "me", password: "pw" })
+    expect(manager.canDownload()).toBe(true)
+    manager.add(FILE)
+    await transfer.waitForStart()
+    expect(transfer.started.length).toBe(1)
+  })
+})

@@ -2,6 +2,7 @@ import { createWriteStream, type WriteStream } from "node:fs"
 import { mkdir, rename, stat, unlink } from "node:fs/promises"
 import path from "node:path"
 import {
+  describeLoginRejection,
   registerTransferDenier,
   sharedSoulseekClient,
   startTransfer,
@@ -70,6 +71,7 @@ export class SoulseekDownloads {
   private readonly client: SoulseekClient
   private readonly entries = new Map<string, SlskEntry>()
   private readonly unregisterDenier: () => void
+  private credentials: SoulseekCredentials
 
   constructor(
     private readonly options: SoulseekDownloadsOptions,
@@ -77,6 +79,7 @@ export class SoulseekDownloads {
     private readonly transfer: typeof startTransfer = startTransfer,
   ) {
     this.client = client
+    this.credentials = options.credentials
     this.unregisterDenier = registerTransferDenier(client, (username, filePath) => {
       const entry = this.entries.get(slskKey({ username, path: filePath, size: 0 }))
       return entry?.state === "paused"
@@ -84,8 +87,12 @@ export class SoulseekDownloads {
   }
 
   canDownload(): boolean {
-    const { username, password } = this.options.credentials
+    const { username, password } = this.credentials
     return username !== undefined && username !== "" && password !== undefined && password !== ""
+  }
+
+  setCredentials(credentials: SoulseekCredentials): void {
+    this.credentials = credentials
   }
 
   add(file: SlskFileRef, addedAt?: number): string {
@@ -226,14 +233,14 @@ export class SoulseekDownloads {
       return
     }
     try {
-      const { username, password, listenPort } = this.options.credentials
+      const { username, password, listenPort } = this.credentials
       const response = await this.client.connect({
         username: username ?? "",
         password: password ?? "",
         ...(listenPort !== undefined ? { listenPort } : {}),
       })
       if (!response.success) {
-        throw new Error(`login rejected: ${response.rejectionReason ?? "unknown reason"}`)
+        throw new Error(describeLoginRejection(response.rejectionReason, response.rejectionDetail))
       }
       await entry.closing
       await mkdir(path.dirname(entry.partPath), { recursive: true })

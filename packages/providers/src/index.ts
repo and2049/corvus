@@ -46,6 +46,7 @@ export { Eztv, parseEztv } from "./sources/eztv"
 export { X1337, parseX1337 } from "./sources/x1337"
 export { Rss, parseRssFeed, renderSearchURL } from "./sources/rss"
 export { Soulseek } from "./sources/soulseek"
+export { describeLoginRejection, validateCredentials, NOT_CONFIGURED } from "./sources/soulseek/credentials"
 export { SoulseekClient, type ConnectionState, type SoulseekOptions } from "./sources/soulseek/client"
 export {
   registerTransferDenier,

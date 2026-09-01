@@ -140,7 +140,7 @@ export function Results(props: { onBack: () => void; onDownload: () => void }) {
         {Object.entries(search.statuses())
           .map(([name, status]) => {
             if (status.state === "pending") return `${name} ...`
-            if (status.state === "error") return `${name} error (${truncate(status.message ?? "", 30)})`
+            if (status.state === "error") return `${name} error (${truncate(status.message ?? "", 48)})`
             return `${name} done`
           })
           .join("  |  ")}

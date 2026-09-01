@@ -23,6 +23,12 @@ interface Row {
   readonly label: string
   readonly kind: RowKind
   readonly note: string
+  readonly secret?: boolean
+}
+
+const SLSK_FIELDS: Readonly<Record<string, "username" | "password">> = {
+  slskUsername: "username",
+  slskPassword: "password",
 }
 
 const ROWS: readonly Row[] = [
@@ -36,6 +42,8 @@ const ROWS: readonly Row[] = [
   { key: "hideNSFW", label: "hide nsfw", kind: "toggle", note: "applies now" },
   { key: "theme", label: "theme", kind: "toggle", note: "applies now" },
   { key: "searchTimeoutMs", label: "search timeout (ms)", kind: "int", note: "applies now" },
+  { key: "slskUsername", label: "soulseek username", kind: "text", note: "applies now · an unused username registers a new account" },
+  { key: "slskPassword", label: "soulseek password", kind: "text", secret: true, note: "applies now · there is no password reset, keep it safe" },
   { key: "sources", label: "sources »", kind: "nav", note: "enable/disable search sources" },
 ]
 
@@ -85,8 +93,12 @@ export function Settings(props: { onBack: () => void; onOpenSources: () => void 
         return c.theme
       case "searchTimeoutMs":
         return String(c.searchTimeoutMs)
-      case "sources":
-        return ""
+      case "slskUsername":
+      case "slskPassword": {
+        const value = c.providers["soulseek"]?.[SLSK_FIELDS[row.key]!] ?? ""
+        if (value === "") return "(not set)"
+        return row.secret === true ? "*".repeat(value.length) : value
+      }
       default:
         return ""
     }
@@ -94,7 +106,7 @@ export function Settings(props: { onBack: () => void; onOpenSources: () => void 
 
   const editInitial = (row: Row): string => {
     // Size rows always start empty: typing replaces the limit, an empty submit clears it.
-    if (row.kind === "size") return ""
+    if (row.kind === "size" || row.secret === true) return ""
     const value = displayValue(row)
     return value.startsWith("(") ? "" : value
   }
@@ -128,6 +140,8 @@ export function Settings(props: { onBack: () => void; onOpenSources: () => void 
       // input clears the limit.
       const bytes = trimmed === "" ? -1 : parseHumanSize(trimmed)
       update({ [row.key]: bytes > 0 ? bytes : -1 })
+    } else if (SLSK_FIELDS[row.key] !== undefined) {
+      update({ providers: { soulseek: { [SLSK_FIELDS[row.key]!]: row.secret === true ? raw : trimmed } } })
     } else {
       update({ [row.key]: trimmed })
     }
