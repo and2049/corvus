@@ -107,7 +107,7 @@ describe("App", () => {
     expect(frame).toContain("idle")
     expect(frame).toContain(`v${CORVUS_VERSION}`)
     expect(frame).toContain("ctrl+g settings")
-    expect(frame).toContain("ctrl+shift+c copy selection")
+    expect(frame).toContain("right click copy selection")
     expect(frame.includes(`corvus v${CORVUS_VERSION}`)).toBe(false)
     await t.renderer.destroy()
   })

@@ -15,7 +15,7 @@ const HOME_HINTS: readonly Hint[] = [
   { key: "tab", label: "cycle mode" },
   { key: "ctrl+g", label: "settings" },
   { key: "ctrl+f", label: "sources" },
-  { key: "ctrl+shift+c", label: "copy selection" },
+  { key: "right click", label: "copy selection" },
 ]
 
 const INSERT_HINTS: readonly Hint[] = [{ key: "esc", label: "normal" }]
