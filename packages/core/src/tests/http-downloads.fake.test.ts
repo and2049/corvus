@@ -4,6 +4,7 @@ import { existsSync } from "node:fs"
 import path from "node:path"
 import { HttpDownloads, httpKey, type HttpDownloadRequest } from "../http-downloads"
 import { FILEPATH_SENTINEL, type RunProcess, type RunResult } from "../ytdlp"
+import type { MediaTools } from "../media-tools"
 
 const tmpRoot = path.join(process.env["TEMP"] ?? "/tmp", `corvus-http-test-${process.pid}`)
 let dirCounter = 0
@@ -58,6 +59,59 @@ const REQUEST: HttpDownloadRequest = {
 }
 
 describe("HttpDownloads", () => {
+  test("probe and restored downloads use prepared executables and environment", async () => {
+    const tools = { ytdlp: "/managed/yt-dlp", env: { PATH: "/system:/managed" } }
+    let spawned = false
+    const manager = new HttpDownloads({ downloadDir: tmpRoot, prepareTools: async () => tools },
+      (bin, _args, _onLine, env) => {
+        expect(bin).toBe(tools.ytdlp)
+        expect(env).toEqual(tools.env)
+        spawned = true
+        return { handle: { kill() {} }, done: Promise.resolve({ code: 0, stderr: "" }) }
+      },
+      async (url, config, _capture, env) => {
+        expect(config?.path).toBe(tools.ytdlp)
+        expect(env).toEqual(tools.env)
+        return { url, id: "abc", title: "title", formats: [] }
+      },
+    )
+    await manager.probe(REQUEST.url)
+    manager.add(REQUEST)
+    expect(spawned).toBe(false)
+    await Bun.sleep(0)
+    expect(spawned).toBe(true)
+  })
+
+  for (const action of ["pause", "remove", "shutdown"] as const) {
+    test(`${action} during dependency setup prevents a late process launch`, async () => {
+      let finish!: (tools: MediaTools) => void
+      const ready = new Promise<MediaTools>((resolve) => { finish = resolve })
+      const runner = fakeRunner()
+      const manager = new HttpDownloads({ downloadDir: tmpRoot, prepareTools: () => ready }, runner.run)
+      const key = manager.add(REQUEST)
+      if (action === "shutdown") await manager.shutdown()
+      else await manager[action](key)
+      finish({ ytdlp: "yt-dlp", env: {} })
+      await Bun.sleep(0)
+      expect(runner.procs).toHaveLength(0)
+    })
+  }
+
+  test("setup failure becomes a retryable download error", async () => {
+    let attempts = 0
+    const runner = fakeRunner()
+    const manager = new HttpDownloads({ downloadDir: tmpRoot, prepareTools: async () => {
+      if (++attempts === 1) throw new Error("setup offline")
+      return { ytdlp: "yt-dlp", env: {} }
+    } }, runner.run)
+    const key = manager.add(REQUEST)
+    await Bun.sleep(0)
+    expect(manager.snapshots()[0]!.error).toBe("setup offline")
+    manager.retry(key)
+    await Bun.sleep(0)
+    expect(runner.procs).toHaveLength(1)
+  })
+
   test("full lifecycle: fetching, downloading with progress, done with final path", async () => {
     const { manager, runner, downloadDir } = makeManager()
     const key = manager.add(REQUEST)

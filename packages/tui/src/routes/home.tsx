@@ -260,7 +260,7 @@ export function Home(props: {
           />
         </box>
         <HRule />
-        <text fg={theme.dim}>{resolving() ? "resolving..." : MODES[mode()].action}</text>
+        <text fg={theme.dim}>{resolving() ? downloads?.toolStatus() ?? "resolving..." : MODES[mode()].action}</text>
       </box>
     </box>
   )

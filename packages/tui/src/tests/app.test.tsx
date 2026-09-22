@@ -66,6 +66,7 @@ function createFakeHttp(info: YtDlpInfo, configuredAudioFormat = "mp3") {
         return `http:${req.url}`
       },
       audioFormat: () => configuredAudioFormat,
+      toolStatus: () => undefined,
       keys: () => added.map((a) => `http:${a.url}`),
       snapshots: () => [],
       persisted: () => [],

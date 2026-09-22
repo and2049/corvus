@@ -3,6 +3,7 @@ import { createCliRenderer } from "@opentui/core"
 import { render } from "@opentui/solid"
 import {
   configDir,
+  createMediaTools,
   DownloadsFile,
   Engine,
   HttpDownloads,
@@ -43,7 +44,13 @@ export async function boot(): Promise<void> {
     },
   })
 
-  const httpDownloads = new HttpDownloads({ downloadDir: config.downloadDir, config: config.ytdlp })
+  let toolStatus: string | undefined
+  const httpDownloads = new HttpDownloads({
+    downloadDir: config.downloadDir,
+    config: config.ytdlp,
+    prepareTools: createMediaTools({ onStatus: (message) => { toolStatus = message } }),
+    toolStatus: () => toolStatus,
+  })
 
   const downloadsFile = new DownloadsFile(`${configDir()}/downloads.json`)
   const persisted = await loadDownloads(`${configDir()}/downloads.json`)

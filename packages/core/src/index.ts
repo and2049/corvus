@@ -50,3 +50,4 @@ export {
   type PersistedSlskFile,
 } from "./state"
 export { looksLikeTorrentInput, magnetFromTorrentBytes, magnetFromTorrentInput } from "./torrent-file"
+export { createMediaTools, type MediaTools, type PrepareMediaTools } from "./media-tools"

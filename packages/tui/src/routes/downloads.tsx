@@ -298,6 +298,9 @@ export function Downloads(props: { onBack: () => void }) {
           <Show when={snapshots().length === 0}>
             <text fg={theme.dim}>no downloads</text>
           </Show>
+          <Show when={downloads.toolStatus()}>
+            <text fg={theme.dim}>{downloads.toolStatus()}</text>
+          </Show>
           <Show when={clientError()} keyed>
             {(message) => <text fg={theme.error} truncate wrapMode="none">{`client: ${message}`}</text>}
           </Show>

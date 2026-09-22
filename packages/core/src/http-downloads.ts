@@ -2,6 +2,7 @@ import { rm } from "node:fs/promises"
 import type { YtDlpConfig } from "./config"
 import type { DownloadSnapshot } from "./engine"
 import type { PersistedDownload } from "./state"
+import type { MediaTools, PrepareMediaTools } from "./media-tools"
 import {
   buildDownloadArgs,
   defaultRun,
@@ -21,6 +22,8 @@ const SPEED_WINDOW_MS = 5_000
 export interface HttpDownloadsOptions {
   readonly downloadDir: string
   readonly config?: YtDlpConfig
+  readonly prepareTools?: PrepareMediaTools
+  readonly toolStatus?: () => string | undefined
 }
 
 export interface HttpDownloadRequest {
@@ -62,7 +65,7 @@ interface HttpEntry {
  * the same pull snapshot shape as the torrent engine and SoulseekDownloads, so
  * all three render in one dashboard. Mirrors SoulseekDownloads: an entry map, a
  * generation counter that invalidates stale async work, and a rolling speed
- * window. yt-dlp must be installed and on PATH (or configured via ytdlp.path).
+ * window. The application supplies lazy dependency setup through prepareTools.
  */
 export class HttpDownloads {
   private readonly entries = new Map<string, HttpEntry>()
@@ -73,8 +76,13 @@ export class HttpDownloads {
     private readonly probeFn: typeof probeFormats = probeFormats,
   ) {}
 
-  probe(url: string): Promise<YtDlpInfo> {
-    return this.probeFn(url, this.options.config)
+  async probe(url: string): Promise<YtDlpInfo> {
+    const tools = await this.options.prepareTools?.(this.options.config)
+    return this.probeFn(url, tools ? { ...this.options.config, path: tools.ytdlp } : this.options.config, undefined, tools?.env)
+  }
+
+  toolStatus(): string | undefined {
+    return this.options.toolStatus?.()
   }
 
   defaultFormat(): string {
@@ -222,7 +230,24 @@ export class HttpDownloads {
 
   private start(entry: HttpEntry): void {
     const generation = entry.generation
-    const bin = ytdlpBin(this.options.config)
+    if (this.options.prepareTools) {
+      void this.options.prepareTools(this.options.config).then(
+        (tools) => {
+          if (entry.generation === generation) this.spawn(entry, generation, tools)
+        },
+        (error) => {
+          if (entry.generation !== generation) return
+          entry.state = "error"
+          entry.error = error instanceof Error ? error.message : String(error)
+        },
+      )
+    } else {
+      this.spawn(entry, generation)
+    }
+  }
+
+  private spawn(entry: HttpEntry, generation: number, tools?: MediaTools): void {
+    const bin = tools?.ytdlp ?? ytdlpBin(this.options.config)
     const args = buildDownloadArgs(entry.url, entry.format, this.options.downloadDir, {
       extractAudio: entry.extractAudio,
       audioFormat: entry.audioFormat,
@@ -232,7 +257,7 @@ export class HttpDownloads {
     try {
       started = this.run(bin, args, (line) => {
         if (entry.generation === generation) this.onLine(entry, line)
-      })
+      }, tools?.env)
     } catch (error) {
       entry.state = "error"
       entry.error = error instanceof Error ? error.message : String(error)

@@ -45,6 +45,7 @@ export interface DownloadsStore {
   readonly probeHttp: (url: string) => Promise<ProbeOutcome>
   readonly addHttp: (info: YtDlpInfo, format: YtDlpFormat | undefined, audio?: AudioSpec) => AddOutcome
   readonly audioFormat: () => string
+  readonly toolStatus: () => string | undefined
   readonly remove: (key: string, opts?: { deleteData?: boolean }) => Promise<void>
   readonly togglePause: (key: string) => void
   readonly toggleFile: (key: string, index: number) => void
@@ -72,6 +73,7 @@ export function DownloadsProvider(props: {
     ...(props.http?.snapshots() ?? []),
   ]
   const [snapshots, setSnapshots] = createSignal<readonly DownloadSnapshot[]>(allSnapshots())
+  const [toolStatus, setToolStatus] = createSignal<string | undefined>(props.http?.toolStatus())
 
   const addedAt = new Map<string, number>()
   for (const download of props.persisted ?? []) {
@@ -80,6 +82,7 @@ export function DownloadsProvider(props: {
 
   const lastStates = new Map<string, DownloadSnapshot["state"]>()
   const tick = () => {
+    setToolStatus(props.http?.toolStatus())
     const next = allSnapshots()
     setSnapshots(next)
     let changed = false
@@ -286,6 +289,7 @@ export function DownloadsProvider(props: {
     addMagnet,
     addInput,
     probeHttp,
+    toolStatus,
     addHttp,
     audioFormat,
     remove,

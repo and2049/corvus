@@ -27,6 +27,32 @@ corvus upgrade -v 0.1.0   # a specific version
 
 Releases are published from git tags (`v*.*.*`). Running from source (`bun dev`) reports version `local`.
 
+## Media downloads
+
+Switch the home input to HTTP mode to paste a media URL, choose a video format,
+or extract audio. On first use, Corvus checks `PATH` separately for `yt-dlp`,
+`ffmpeg`, and `ffprobe`. Only missing tools are downloaded to `~/.corvus/tools`;
+cached tools are reused on subsequent runs. Existing system installations take
+precedence and are never replaced. Setup progress appears in the TUI.
+
+Automatic setup supports Linux x64/arm64, macOS x64/arm64, and Windows x64.
+It uses standalone executables from [yt-dlp](https://github.com/yt-dlp/yt-dlp/releases)
+and [ffmpeg-static](https://github.com/eugeneware/ffmpeg-static/releases/tag/b6.1.1).
+The initial setup requires an internet connection; failed downloads can be retried.
+Tools are cached independently of Corvus upgrades. To refresh a managed tool,
+remove its executable from `~/.corvus/tools` and use a media URL again.
+
+An explicit yt-dlp override in `~/.corvus/config.yaml` is always respected:
+
+```yaml
+ytdlp:
+  path: /path/to/yt-dlp
+  audioFormat: mp3
+```
+
+If that override is missing, Corvus reports an error rather than installing a
+replacement. FFmpeg and ffprobe are still checked independently.
+
 ## Development
 
 ```bash

@@ -227,10 +227,11 @@ export type RunProcess = (
   bin: string,
   args: readonly string[],
   onLine: (line: string) => void,
+  env?: NodeJS.ProcessEnv,
 ) => { handle: RunHandle; done: Promise<RunResult> }
 
-export const defaultRun: RunProcess = (bin, args, onLine) => {
-  const child = Bun.spawn([bin, ...args], { stdout: "pipe", stderr: "pipe", stdin: "ignore" })
+export const defaultRun: RunProcess = (bin, args, onLine, env) => {
+  const child = Bun.spawn([bin, ...args], { stdout: "pipe", stderr: "pipe", stdin: "ignore", env })
   const stderrChunks: string[] = []
   const stdout = pumpLines(child.stdout, onLine)
   const stderr = pumpLines(child.stderr, (line) => {
@@ -245,10 +246,10 @@ export const defaultRun: RunProcess = (bin, args, onLine) => {
   return { handle: { kill: () => child.kill() }, done }
 }
 
-export type CaptureProcess = (bin: string, args: readonly string[]) => Promise<RunResult & { stdout: string }>
+export type CaptureProcess = (bin: string, args: readonly string[], env?: NodeJS.ProcessEnv) => Promise<RunResult & { stdout: string }>
 
-const defaultCapture: CaptureProcess = async (bin, args) => {
-  const child = Bun.spawn([bin, ...args], { stdout: "pipe", stderr: "pipe", stdin: "ignore" })
+const defaultCapture: CaptureProcess = async (bin, args, env) => {
+  const child = Bun.spawn([bin, ...args], { stdout: "pipe", stderr: "pipe", stdin: "ignore", env })
   const [stdout, stderr, code] = await Promise.all([
     new Response(child.stdout).text(),
     new Response(child.stderr).text(),
@@ -262,10 +263,11 @@ export async function probeFormats(
   url: string,
   config?: YtDlpConfig,
   capture: CaptureProcess = defaultCapture,
+  env?: NodeJS.ProcessEnv,
 ): Promise<YtDlpInfo> {
   let result: RunResult & { stdout: string }
   try {
-    result = await capture(ytdlpBin(config), buildProbeArgs(url))
+    result = await capture(ytdlpBin(config), buildProbeArgs(url), env)
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") {
       throw new Error("yt-dlp not found - install it and ensure it is on your PATH")
