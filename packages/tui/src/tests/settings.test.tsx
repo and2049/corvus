@@ -46,8 +46,8 @@ describe("Settings", () => {
       </ConfigProvider>
     ), { width: 100, height: 30 })
     await t.flush()
-    // Existing settings and sources occupy rows 0..12; media begins at 13.
-    for (let i = 0; i < 13; i++) t.mockInput.pressArrow("down")
+    // Existing settings and sources occupy rows 0..11; media begins at 12.
+    for (let i = 0; i < 12; i++) t.mockInput.pressArrow("down")
     await t.flush()
     t.mockInput.pressEnter() // best -> 1080p
     await t.flush()
@@ -76,7 +76,7 @@ describe("Settings", () => {
       </ConfigProvider>
     ), { width: 100, height: 30 })
     await t.flush()
-    for (let i = 0; i < 18; i++) t.mockInput.pressArrow("down")
+    for (let i = 0; i < 17; i++) t.mockInput.pressArrow("down")
     await t.flush()
     t.mockInput.pressEnter()
     await t.flush()
@@ -104,33 +104,6 @@ describe("Settings", () => {
     t.mockInput.pressEnter()
     await t.flush()
     expect(patches).toEqual([{ seedAfterComplete: true }])
-    await t.renderer.destroy()
-  })
-
-  test("theme row toggles between dark and light and persists", async () => {
-    const patches: ConfigPatch[] = []
-    const t = await testRender(
-      () => (
-        <ConfigProvider engine={fakeEngine} initial={defaultConfig()} persist={(p) => patches.push(p)}>
-          <Settings onBack={() => {}} onOpenSources={() => {}} />
-        </ConfigProvider>
-      ),
-      { width: 100, height: 30 },
-    )
-    await t.flush()
-    // rows: downloadDir, seed, torrentPort, maxConns, downloadLimit, uploadLimit, proxy, hideNSFW, theme
-    for (let i = 0; i < 8; i += 1) {
-      t.mockInput.pressArrow("down")
-      await t.flush()
-    }
-    expect(t.captureCharFrame()).toContain("dark")
-    t.mockInput.pressEnter()
-    await t.flush()
-    expect(patches).toEqual([{ theme: "light" }])
-    expect(t.captureCharFrame()).toContain("light")
-    t.mockInput.pressEnter()
-    await t.flush()
-    expect(patches).toEqual([{ theme: "light" }, { theme: "dark" }])
     await t.renderer.destroy()
   })
 
@@ -209,7 +182,7 @@ describe("Settings soulseek credentials", () => {
     )
     await t.flush()
     expect(t.captureCharFrame()).toContain("soulseek username")
-    await openRow(t, 10)
+    await openRow(t, 9)
     t.mockInput.typeText("crow")
     await t.flush()
     t.mockInput.pressEnter()
@@ -230,7 +203,7 @@ describe("Settings soulseek credentials", () => {
       { width: 100, height: 30 },
     )
     await t.flush()
-    await openRow(t, 11)
+    await openRow(t, 10)
     t.mockInput.typeText("s3cret")
     await t.flush()
     t.mockInput.pressEnter()

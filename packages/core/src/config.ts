@@ -34,14 +34,11 @@ export interface YtDlpConfig {
   readonly rememberLast?: boolean
 }
 
-export type ThemeMode = "dark" | "light"
-
 export interface CorvusConfig {
   readonly downloadDir: string
   readonly seedAfterComplete: boolean
   readonly searchTimeoutMs: number
   readonly hideNSFW: boolean
-  readonly theme: ThemeMode
   readonly proxy?: string
   readonly torrentPort?: number
   readonly maxConns?: number
@@ -58,7 +55,6 @@ export function defaultConfig(): CorvusConfig {
     seedAfterComplete: false,
     searchTimeoutMs: 15_000,
     hideNSFW: true,
-    theme: "dark",
     providers: {
       knaben: { enabled: true },
       yts: { enabled: true },
@@ -102,7 +98,13 @@ export async function loadConfig(filePath: string = configPath()): Promise<Corvu
     return defaultConfig()
   }
   if (raw === undefined || raw.trim() === "") return defaultConfig()
-  return deepMerge(defaultConfig(), parse(raw))
+  const merged = deepMerge(defaultConfig(), parse(raw)) as CorvusConfig & { theme?: unknown }
+  // Drop the removed dark/light mode when reading older config files.
+  if ("theme" in merged) {
+    const { theme: _theme, ...withoutTheme } = merged
+    return withoutTheme
+  }
+  return merged
 }
 
 export type ConfigPatch = Record<string, unknown>

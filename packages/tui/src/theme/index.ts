@@ -1,54 +1,22 @@
-import { createSignal } from "solid-js"
-import { dark } from "./dark"
-import { light } from "./light"
+import { RGBA } from "@opentui/core"
 import type { Palette } from "./palette"
 
-export type ThemeMode = "dark" | "light"
 export type { Palette }
-export { dark, light }
-
-const [mode, setMode] = createSignal<ThemeMode>("dark")
-
-export const themeMode = mode
-export const setThemeMode = setMode
-
-const palette = (): Palette => (mode() === "light" ? light : dark)
-
+// Keep all UI colors terminal-native so the user's terminal controls the
+// actual appearance rather than a light/dark application palette.
 export const theme: Palette = {
-  get bg() {
-    return palette().bg
-  },
-  get elevatedBg() {
-    return palette().elevatedBg
-  },
-  get selectedBg() {
-    return palette().selectedBg
-  },
-  get borderMuted() {
-    return palette().borderMuted
-  },
-  get text() {
-    return palette().text
-  },
-  get muted() {
-    return palette().muted
-  },
-  get dim() {
-    return palette().dim
-  },
-  get accent() {
-    return palette().accent
-  },
-  get success() {
-    return palette().success
-  },
-  get warning() {
-    return palette().warning
-  },
-  get error() {
-    return palette().error
-  },
+  bg: RGBA.defaultBackground(),
+  elevatedBg: RGBA.defaultBackground(),
+  selectedBg: RGBA.fromIndex(4),
+  borderMuted: RGBA.fromIndex(8),
+  text: RGBA.defaultForeground(),
+  muted: RGBA.fromIndex(8),
+  dim: RGBA.fromIndex(8),
+  accent: RGBA.fromIndex(6),
+  success: RGBA.fromIndex(2),
+  warning: RGBA.fromIndex(3),
+  error: RGBA.fromIndex(1),
 }
 
-export const seedColor = (seeders: number): string =>
+export const seedColor = (seeders: number): Palette[keyof Palette] =>
   seeders >= 50 ? theme.success : seeders >= 10 ? theme.warning : theme.error

@@ -1,4 +1,4 @@
-import type { ScrollBoxRenderable } from "@opentui/core"
+import type { ColorInput, ScrollBoxRenderable } from "@opentui/core"
 import { useKeyboard, useRenderer } from "@opentui/solid"
 import { createEffect, createMemo, createSignal, For, onCleanup, Show } from "solid-js"
 import type { DownloadSnapshot } from "@corvus/core"
@@ -60,7 +60,7 @@ function sortSnapshots(list: readonly DownloadSnapshot[], mode: number): Downloa
   return [...list]
 }
 
-const stateColor = (snapshot: DownloadSnapshot): string => {
+const stateColor = (snapshot: DownloadSnapshot): ColorInput => {
   if (snapshot.seeding) return theme.success
   switch (snapshot.state) {
     case "done":

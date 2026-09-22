@@ -1,7 +1,6 @@
-import { createContext, createEffect, createSignal, useContext, type JSX } from "solid-js"
+import { createContext, createSignal, useContext, type JSX } from "solid-js"
 import { deepMerge, type ConfigPatch, type CorvusConfig, type Engine, type HttpDownloads, type SoulseekDownloads } from "@corvus/core"
 import { setFetchCookies, setFetchProxy } from "@corvus/providers"
-import { setThemeMode } from "../theme"
 
 export interface ConfigStore {
   readonly config: () => CorvusConfig
@@ -19,8 +18,6 @@ export function ConfigProvider(props: {
   children: JSX.Element
 }) {
   const [config, setConfig] = createSignal<CorvusConfig>(props.initial)
-
-  createEffect(() => setThemeMode(config().theme))
 
   const update = (patch: ConfigPatch) => {
     const next = deepMerge(config(), patch)
