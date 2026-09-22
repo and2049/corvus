@@ -26,7 +26,7 @@ export function App(props: {
   onExit?: () => void
 }) {
   return (
-    <ConfigProvider engine={props.engine} slsk={props.slsk} initial={props.config} persist={props.onConfigChange}>
+    <ConfigProvider engine={props.engine} slsk={props.slsk} http={props.http} initial={props.config} persist={props.onConfigChange}>
       <AppInner
         engine={props.engine}
         slsk={props.slsk}

@@ -51,3 +51,4 @@ export {
 } from "./state"
 export { looksLikeTorrentInput, magnetFromTorrentBytes, magnetFromTorrentInput } from "./torrent-file"
 export { createMediaTools, type MediaTools, type PrepareMediaTools } from "./media-tools"
+export { MEDIA_PRESETS, mediaPresetIndex, resolveMediaPreset, type MediaPreset } from "./media-presets"

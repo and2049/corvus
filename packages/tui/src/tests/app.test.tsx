@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { testRender } from "@opentui/solid"
 import { defaultConfig } from "@corvus/core"
-import type { Engine, HttpDownloads, YtDlpInfo } from "@corvus/core"
+import type { ConfigPatch, Engine, HttpDownloads, YtDlpConfig, YtDlpInfo } from "@corvus/core"
 import { infoHashFromMagnet } from "@corvus/providers"
 import { App } from "../app"
 import { CORVUS_VERSION } from "../version"
@@ -66,6 +66,7 @@ function createFakeHttp(info: YtDlpInfo, configuredAudioFormat = "mp3") {
         return `http:${req.url}`
       },
       audioFormat: () => configuredAudioFormat,
+      setConfig: () => {},
       toolStatus: () => undefined,
       keys: () => added.map((a) => `http:${a.url}`),
       snapshots: () => [],
@@ -90,6 +91,76 @@ const SAMPLE_INFO: YtDlpInfo = {
 }
 
 describe("App", () => {
+  for (const scenario of [
+    { name: "1080p with MP4 preference", config: { preset: "1080p", preferMp4: true }, format: "bestvideo[height<=1080][ext=mp4][vcodec^=avc1]+bestaudio[ext=m4a]/best[height<=1080][ext=mp4][vcodec^=avc1]/bestvideo*[height<=1080]+bestaudio/best[height<=1080]" },
+    { name: "original audio", config: { preset: "original" }, format: "bestaudio/best", audio: "best" },
+    { name: "existing custom expression", config: { format: "best[height<=480]" }, format: "best[height<=480]" },
+    { name: "individual formats", config: { preset: "formats" }, format: "137+bestaudio/137" },
+  ] satisfies { name: string; config: YtDlpConfig; format: string; audio?: string }[]) {
+    test(`media picker honors ${scenario.name}`, async () => {
+      const fakeHttp = createFakeHttp(SAMPLE_INFO)
+      const t = await testRender(() => <App config={{ ...defaultConfig(), ytdlp: scenario.config }} engine={createFakeEngine().engine} http={fakeHttp.http} persist={() => {}} />, { width: 100, height: 30 })
+      await t.flush()
+      t.mockInput.pressTab()
+      t.mockInput.pressTab()
+      await t.mockInput.typeText(SAMPLE_INFO.url)
+      t.mockInput.pressEnter()
+      await t.flush()
+      await Bun.sleep(30)
+      await t.flush()
+      t.mockInput.pressEnter()
+      await t.flush()
+      expect(fakeHttp.added[0]!.format).toBe(scenario.format)
+      expect(fakeHttp.added[0]!.audioFormat).toBe(scenario.audio)
+      if (scenario.audio) expect(fakeHttp.added[0]!.audioQuality).toBeUndefined()
+      await t.renderer.destroy()
+    })
+  }
+
+  for (const rememberLast of [true, false]) {
+    test(`preset selection persistence with rememberLast=${rememberLast}`, async () => {
+      const fakeHttp = createFakeHttp(SAMPLE_INFO)
+      const patches: ConfigPatch[] = []
+      const t = await testRender(() => <App config={{ ...defaultConfig(), ytdlp: { rememberLast } }} engine={createFakeEngine().engine} http={fakeHttp.http} persist={() => {}} onConfigChange={(p) => patches.push(p)} />, { width: 100, height: 30 })
+      await t.flush()
+      t.mockInput.pressTab()
+      t.mockInput.pressTab()
+      await t.mockInput.typeText(SAMPLE_INFO.url)
+      t.mockInput.pressEnter()
+      await t.flush()
+      await Bun.sleep(30)
+      await t.flush()
+      t.mockInput.pressArrow("down")
+      t.mockInput.pressArrow("down")
+      t.mockInput.pressEnter()
+      await t.flush()
+      expect(fakeHttp.added[0]!.format).toBe("bestvideo*[height<=720]+bestaudio/best[height<=720]")
+      expect(patches).toEqual(rememberLast ? [{ ytdlp: { preset: "720p" } }] : [])
+      await t.renderer.destroy()
+    })
+  }
+
+  test("preset picker switches to explicit formats without submitting text", async () => {
+    const fakeHttp = createFakeHttp(SAMPLE_INFO)
+    const t = await testRender(() => <App config={defaultConfig()} engine={createFakeEngine().engine} http={fakeHttp.http} persist={() => {}} />, { width: 100, height: 30 })
+    await t.flush()
+    t.mockInput.pressTab()
+    t.mockInput.pressTab()
+    await t.mockInput.typeText(SAMPLE_INFO.url)
+    t.mockInput.pressEnter()
+    await t.flush()
+    await Bun.sleep(30)
+    await t.flush()
+    await t.mockInput.typeText("f")
+    await t.flush()
+    expect(t.captureCharFrame()).toContain("avc1")
+    t.mockInput.pressEnter()
+    await t.flush()
+    expect(fakeHttp.added[0]!.format).toBe("137+bestaudio/137")
+    expect(fakeHttp.probes).toHaveLength(1)
+    await t.renderer.destroy()
+  })
+
   test("home screen renders bird art, name and search prompt", async () => {
     const { t } = await renderApp()
     await t.flush()
@@ -172,12 +243,12 @@ describe("App", () => {
     const picker = t.captureCharFrame()
     expect(picker).toContain("choose a format")
     expect(picker).toContain("1080p")
-    // Enter downloads the highlighted (best-first) format and routes to downloads.
+    // The default preset chooses the best video and audio at download time.
     t.mockInput.pressEnter()
     await t.flush()
     expect(t.captureCharFrame()).toContain("downloads")
     expect(fakeHttp.added).toHaveLength(1)
-    expect(fakeHttp.added[0]!.format).toBe("137+bestaudio/137")
+    expect(fakeHttp.added[0]!.format).toBe("bestvideo*+bestaudio/best")
     await t.renderer.destroy()
   })
 

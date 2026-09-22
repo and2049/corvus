@@ -2,6 +2,7 @@ import { type InputRenderable, TextAttributes } from "@opentui/core"
 import { useKeyboard } from "@opentui/solid"
 import { createEffect, createSignal, For, onCleanup, onMount } from "solid-js"
 import type { YtDlpInfo } from "@corvus/core"
+import { MEDIA_PRESETS, mediaPresetIndex, resolveMediaPreset } from "@corvus/core"
 import { APP_VERSION, providerCounts } from "../component/footer"
 import { AUDIO_FORMATS, AUDIO_QUALITIES, FormatDialog, audioFormatIndex } from "../component/format-dialog"
 import { HRule } from "../component/hrule"
@@ -62,6 +63,9 @@ export function Home(props: {
   const [pickerAudio, setPickerAudio] = createSignal(false)
   const [audioCursor, setAudioCursor] = createSignal(0)
   const [audioQuality, setAudioQuality] = createSignal(0)
+  const [pickerPresets, setPickerPresets] = createSignal(true)
+  const [presetCursor, setPresetCursor] = createSignal(0)
+  const mediaConfig = () => config?.config().ytdlp
   let input: InputRenderable | undefined
 
   onMount(() => input?.focus())
@@ -72,11 +76,14 @@ export function Home(props: {
   // the overlay from useKeyboard instead; refocus on close.
   const openPicker = (info: YtDlpInfo) => {
     setPickerCursor(0)
-    setPickerAudio(false)
+    const saved = mediaConfig()?.preset
+    setPickerAudio(saved === "audio")
+    setPickerPresets(saved !== "formats")
+    setPresetCursor(mediaPresetIndex(saved ?? (mediaConfig()?.format?.trim() ? "custom" : "best")))
     // Seed the audio list on the configured default format so ytdlp.audioFormat
     // is honoured; quality starts at "best".
-    setAudioCursor(audioFormatIndex(downloads?.audioFormat() ?? "mp3"))
-    setAudioQuality(0)
+    setAudioCursor(audioFormatIndex(mediaConfig()?.audioFormat ?? downloads?.audioFormat() ?? "mp3"))
+    setAudioQuality(Math.max(0, AUDIO_QUALITIES.findIndex((choice) => choice.value === mediaConfig()?.audioQuality)))
     setPicker(info)
     input?.blur()
     shell.setOverlay(() => (
@@ -86,6 +93,9 @@ export function Home(props: {
         audio={pickerAudio}
         audioCursor={audioCursor}
         audioQuality={audioQuality}
+        presets={pickerPresets}
+        presetCursor={presetCursor}
+        preferMp4={() => mediaConfig()?.preferMp4 ?? false}
       />
     ))
   }
@@ -110,10 +120,19 @@ export function Home(props: {
     // extracted and re-encoded to the chosen container), so an empty video
     // format list still allows an audio-only download.
     const audioSpec = audio ? audioChoice() : undefined
+    const preset = !audio && pickerPresets() ? MEDIA_PRESETS[presetCursor()]!.id : undefined
     closePicker()
-    if (format === undefined && audioSpec === undefined) return
-    const outcome = downloads?.addHttp(info, format, audioSpec)
+    if (format === undefined && audioSpec === undefined && preset === undefined) return
+    const outcome = preset !== undefined
+      ? downloads?.addHttpPreset(info, resolveMediaPreset(preset, mediaConfig()))
+      : downloads?.addHttp(info, format, audioSpec)
     if (outcome === "added" || outcome === "duplicate") {
+      if (outcome === "added" && mediaConfig()?.rememberLast !== false) {
+        config?.update({ ytdlp: {
+          preset: audio ? "audio" : preset ?? "formats",
+          ...(audioSpec ? { audioFormat: audioSpec.format, audioQuality: AUDIO_QUALITIES[audioQuality()]!.value } : {}),
+        } })
+      }
       if (outcome === "duplicate") shell.showNotice("already added")
       props.onDownload?.()
       return
@@ -137,6 +156,11 @@ export function Home(props: {
         closePicker()
       } else if (key.name === "a") {
         setPickerAudio((v) => !v)
+      } else if (key.name === "p" || key.name === "f") {
+        setPickerAudio(false)
+        setPickerPresets(key.name === "p")
+      } else if (key.name === "m" && pickerPresets() && !pickerAudio()) {
+        config?.update({ ytdlp: { preferMp4: !mediaConfig()?.preferMp4 } })
       } else if (key.name === "return") {
         choose(info)
       } else if (pickerAudio()) {
@@ -144,6 +168,9 @@ export function Home(props: {
         else if (key.name === "down") setAudioCursor((c) => Math.min(AUDIO_FORMATS.length - 1, c + 1))
         else if (key.name === "left") setAudioQuality((q) => Math.max(0, q - 1))
         else if (key.name === "right") setAudioQuality((q) => Math.min(AUDIO_QUALITIES.length - 1, q + 1))
+      } else if (pickerPresets()) {
+        if (key.name === "up") setPresetCursor((c) => Math.max(0, c - 1))
+        else if (key.name === "down") setPresetCursor((c) => Math.min(MEDIA_PRESETS.length - 1, c + 1))
       } else if (key.name === "up") {
         setPickerCursor((c) => Math.max(0, c - 1))
       } else if (key.name === "down") {

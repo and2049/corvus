@@ -69,16 +69,24 @@ interface HttpEntry {
  */
 export class HttpDownloads {
   private readonly entries = new Map<string, HttpEntry>()
+  private config: YtDlpConfig | undefined
 
   constructor(
     private readonly options: HttpDownloadsOptions,
     private readonly run: RunProcess = defaultRun,
     private readonly probeFn: typeof probeFormats = probeFormats,
-  ) {}
+  ) {
+    this.config = options.config
+  }
+
+  setConfig(config?: YtDlpConfig): void {
+    this.config = config
+  }
 
   async probe(url: string): Promise<YtDlpInfo> {
-    const tools = await this.options.prepareTools?.(this.options.config)
-    return this.probeFn(url, tools ? { ...this.options.config, path: tools.ytdlp } : this.options.config, undefined, tools?.env)
+    const config = this.config
+    const tools = await this.options.prepareTools?.(config)
+    return this.probeFn(url, tools ? { ...config, path: tools.ytdlp } : config, undefined, tools?.env)
   }
 
   toolStatus(): string | undefined {
@@ -86,11 +94,11 @@ export class HttpDownloads {
   }
 
   defaultFormat(): string {
-    return ytdlpDefaultFormat(this.options.config)
+    return ytdlpDefaultFormat(this.config)
   }
 
   audioFormat(): string {
-    return ytdlpAudioFormat(this.options.config)
+    return ytdlpAudioFormat(this.config)
   }
 
   add(request: HttpDownloadRequest, addedAt?: number): string {
@@ -231,7 +239,7 @@ export class HttpDownloads {
   private start(entry: HttpEntry): void {
     const generation = entry.generation
     if (this.options.prepareTools) {
-      void this.options.prepareTools(this.options.config).then(
+      void this.options.prepareTools(this.config).then(
         (tools) => {
           if (entry.generation === generation) this.spawn(entry, generation, tools)
         },
@@ -247,7 +255,7 @@ export class HttpDownloads {
   }
 
   private spawn(entry: HttpEntry, generation: number, tools?: MediaTools): void {
-    const bin = tools?.ytdlp ?? ytdlpBin(this.options.config)
+    const bin = tools?.ytdlp ?? ytdlpBin(this.config)
     const args = buildDownloadArgs(entry.url, entry.format, this.options.downloadDir, {
       extractAudio: entry.extractAudio,
       audioFormat: entry.audioFormat,

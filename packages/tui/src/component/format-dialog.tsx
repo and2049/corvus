@@ -1,7 +1,8 @@
 import type { ScrollBoxRenderable } from "@opentui/core"
 import { useTerminalDimensions } from "@opentui/solid"
-import { createEffect, createMemo, For, Show } from "solid-js"
+import { createEffect, createMemo, For, Match, Show, Switch } from "solid-js"
 import type { YtDlpFormat, YtDlpInfo } from "@corvus/core"
+import { MEDIA_PRESETS } from "@corvus/core"
 import { formatBytes } from "@corvus/providers"
 import { theme } from "../theme"
 import { Dialog } from "./dialog"
@@ -77,6 +78,9 @@ export function FormatDialog(props: {
   audio: () => boolean
   audioCursor: () => number
   audioQuality: () => number
+  presets: () => boolean
+  presetCursor: () => number
+  preferMp4: () => boolean
 }) {
   const dims = useTerminalDimensions()
   const formats = createMemo(() => props.info.formats)
@@ -85,8 +89,8 @@ export function FormatDialog(props: {
   let scroll: ScrollBoxRenderable | undefined
 
   createEffect(() => {
-    const index = props.audio() ? props.audioCursor() : props.cursor()
-    void (props.audio() ? AUDIO_FORMATS.length : formats().length)
+    const index = props.audio() ? props.audioCursor() : props.presets() ? props.presetCursor() : props.cursor()
+    void (props.audio() ? AUDIO_FORMATS.length : props.presets() ? MEDIA_PRESETS.length : formats().length)
     followCursor(scroll, index)
   })
 
@@ -97,9 +101,8 @@ export function FormatDialog(props: {
       </text>
       <box height={listHeight()} flexShrink={0} flexDirection="column" paddingTop={1}>
         <scrollbox ref={(el: ScrollBoxRenderable) => (scroll = el)} flexGrow={1} viewportOptions={{ paddingRight: 1 }}>
-          <Show
-            when={props.audio()}
-            fallback={
+          <Switch>
+            <Match when={!props.audio() && !props.presets()}>
               <For each={formats()}>
                 {(format, index) => {
                   const selected = createMemo(() => index() === props.cursor())
@@ -131,9 +134,9 @@ export function FormatDialog(props: {
                   )
                 }}
               </For>
-            }
-          >
-            <For each={AUDIO_FORMATS}>
+            </Match>
+            <Match when={props.audio()}>
+              <For each={AUDIO_FORMATS}>
               {(choice, index) => {
                 const selected = createMemo(() => index() === props.audioCursor())
                 return (
@@ -163,15 +166,29 @@ export function FormatDialog(props: {
                   </box>
                 )
               }}
-            </For>
-          </Show>
+              </For>
+            </Match>
+            <Match when={props.presets()}>
+              <For each={MEDIA_PRESETS}>
+              {(preset, index) => (
+                <box flexDirection="row" gap={1} height={1} flexShrink={0} backgroundColor={index() === props.presetCursor() ? theme.selectedBg : undefined}>
+                  <text fg={theme.accent}>{index() === props.presetCursor() ? "›" : " "}</text>
+                  <text fg={index() === props.presetCursor() ? theme.accent : theme.text}>{preset.label.padEnd(20)}</text>
+                  <text fg={theme.dim} truncate wrapMode="none">{preset.note}</text>
+                </box>
+              )}
+              </For>
+            </Match>
+          </Switch>
         </scrollbox>
       </box>
       <text fg={theme.dim} flexShrink={0}>
-        <Show when={props.audio()} fallback="enter download · a extract audio">
+        <Show when={props.audio()} fallback={props.presets()
+          ? `enter download · f formats · a audio · m prefer MP4: ${props.preferMp4() ? "on" : "off"}`
+          : "enter download · p presets · a audio"}>
           {audioChoice()?.kind === "lossy"
-            ? "enter extract audio · ←/→ quality · a video"
-            : "enter extract audio · a video"}
+            ? "enter extract audio · ←/→ quality · a video · p presets"
+            : "enter extract audio · a video · p presets"}
         </Show>
       </text>
     </Dialog>

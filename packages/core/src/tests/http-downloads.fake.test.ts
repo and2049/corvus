@@ -59,6 +59,25 @@ const REQUEST: HttpDownloadRequest = {
 }
 
 describe("HttpDownloads", () => {
+  test("media configuration changes affect new probes and keep existing requests intact", async () => {
+    const runner = fakeRunner()
+    const probes: string[] = []
+    const manager = new HttpDownloads({ downloadDir: tmpRoot, config: { path: "/old/yt-dlp" } }, runner.run,
+      async (url, config) => {
+        probes.push(config?.path ?? "")
+        return { url, id: "id", title: "title", formats: [] }
+      },
+    )
+    manager.add(REQUEST)
+    manager.setConfig({ path: "/new/yt-dlp", audioFormat: "opus", format: "best[height<=720]" })
+    await manager.probe(REQUEST.url)
+    expect(probes).toEqual(["/new/yt-dlp"])
+    expect(manager.audioFormat()).toBe("opus")
+    expect(manager.defaultFormat()).toBe("best[height<=720]")
+    expect(manager.persisted()[0]!.http?.format).toBe(REQUEST.format)
+    expect(runner.procs).toHaveLength(1)
+  })
+
   test("probe and restored downloads use prepared executables and environment", async () => {
     const tools = { ytdlp: "/managed/yt-dlp", env: { PATH: "/system:/managed" } }
     let spawned = false

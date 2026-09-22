@@ -2,6 +2,7 @@ import { lstat, mkdir, readFile, rename, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { parse, parseDocument } from "yaml"
+import type { MediaPreset } from "./media-presets"
 
 export interface ProviderConfig {
   readonly enabled?: boolean
@@ -27,6 +28,10 @@ export interface YtDlpConfig {
   readonly path?: string
   readonly format?: string
   readonly audioFormat?: string
+  readonly audioQuality?: string
+  readonly preset?: MediaPreset | "audio" | "formats"
+  readonly preferMp4?: boolean
+  readonly rememberLast?: boolean
 }
 
 export type ThemeMode = "dark" | "light"

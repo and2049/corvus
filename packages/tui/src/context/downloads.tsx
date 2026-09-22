@@ -44,6 +44,7 @@ export interface DownloadsStore {
   readonly addInput: (raw: string) => Promise<AddOutcome>
   readonly probeHttp: (url: string) => Promise<ProbeOutcome>
   readonly addHttp: (info: YtDlpInfo, format: YtDlpFormat | undefined, audio?: AudioSpec) => AddOutcome
+  readonly addHttpPreset: (info: YtDlpInfo, request: { format: string; extractAudio?: boolean; audioFormat?: string; audioQuality?: string }) => AddOutcome
   readonly audioFormat: () => string
   readonly toolStatus: () => string | undefined
   readonly remove: (key: string, opts?: { deleteData?: boolean }) => Promise<void>
@@ -206,6 +207,15 @@ export function DownloadsProvider(props: {
 
   const audioFormat = (): string => props.http?.audioFormat() ?? DEFAULT_YTDLP_AUDIO_FORMAT
 
+  const addHttpPreset: DownloadsStore["addHttpPreset"] = (info, request) => {
+    if (!props.http) return "invalid"
+    if (props.http.keys().includes(`http:${info.url}`)) return "duplicate"
+    props.http.add({ url: info.url, title: info.title, ...request })
+    tick()
+    persistNow()
+    return "added"
+  }
+
   const remove = async (key: string, opts?: { deleteData?: boolean }) => {
     if (key.startsWith("slsk:")) await props.slsk?.remove(key, opts)
     else if (key.startsWith("http:")) await props.http?.remove(key, opts)
@@ -289,6 +299,7 @@ export function DownloadsProvider(props: {
     addMagnet,
     addInput,
     probeHttp,
+    addHttpPreset,
     toolStatus,
     addHttp,
     audioFormat,

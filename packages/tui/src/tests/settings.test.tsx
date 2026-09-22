@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { testRender } from "@opentui/solid"
-import { defaultConfig, type ConfigPatch, type Engine } from "@corvus/core"
+import { defaultConfig, type ConfigPatch, type Engine, type HttpDownloads, type YtDlpConfig } from "@corvus/core"
 import { ConfigProvider } from "../context/config"
 import { Settings } from "../routes/settings"
 import { Sources } from "../routes/sources"
@@ -36,6 +36,57 @@ describe("Sources", () => {
 })
 
 describe("Settings", () => {
+  test("media controls persist nested configuration and update the backend immediately", async () => {
+    const patches: ConfigPatch[] = []
+    const applied: (YtDlpConfig | undefined)[] = []
+    const http = { setConfig: (config?: YtDlpConfig) => applied.push(config) } as unknown as HttpDownloads
+    const t = await testRender(() => (
+      <ConfigProvider engine={fakeEngine} http={http} initial={{ ...defaultConfig(), ytdlp: { path: "/custom/yt-dlp" } }} persist={(p) => patches.push(p)}>
+        <Settings onBack={() => {}} onOpenSources={() => {}} />
+      </ConfigProvider>
+    ), { width: 100, height: 30 })
+    await t.flush()
+    // Existing settings and sources occupy rows 0..12; media begins at 13.
+    for (let i = 0; i < 13; i++) t.mockInput.pressArrow("down")
+    await t.flush()
+    t.mockInput.pressEnter() // best -> 1080p
+    await t.flush()
+    t.mockInput.pressArrow("down")
+    t.mockInput.pressEnter() // MP4 on
+    await t.flush()
+    t.mockInput.pressArrow("down")
+    t.mockInput.pressEnter() // remember off
+    await t.flush()
+    t.mockInput.pressArrow("down")
+    t.mockInput.pressEnter() // audio mp3 -> m4a
+    await t.flush()
+    expect(patches).toEqual([
+      { ytdlp: { preset: "1080p" } }, { ytdlp: { preferMp4: true } },
+      { ytdlp: { rememberLast: false } }, { ytdlp: { audioFormat: "m4a" } },
+    ])
+    expect(applied.at(-1)).toEqual({ path: "/custom/yt-dlp", preset: "1080p", preferMp4: true, rememberLast: false, audioFormat: "m4a" })
+    await t.renderer.destroy()
+  })
+
+  test("custom media format editor writes under ytdlp", async () => {
+    const patches: ConfigPatch[] = []
+    const t = await testRender(() => (
+      <ConfigProvider engine={fakeEngine} initial={defaultConfig()} persist={(p) => patches.push(p)}>
+        <Settings onBack={() => {}} onOpenSources={() => {}} />
+      </ConfigProvider>
+    ), { width: 100, height: 30 })
+    await t.flush()
+    for (let i = 0; i < 18; i++) t.mockInput.pressArrow("down")
+    await t.flush()
+    t.mockInput.pressEnter()
+    await t.flush()
+    await t.mockInput.typeText("best[height<=480]")
+    t.mockInput.pressEnter()
+    await t.flush()
+    expect(patches).toEqual([{ ytdlp: { format: "best[height<=480]" } }])
+    await t.renderer.destroy()
+  })
+
   test("toggling seed-after-complete flips the value and persists", async () => {
     const patches: ConfigPatch[] = []
     const t = await testRender(

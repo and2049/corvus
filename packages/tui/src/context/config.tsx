@@ -1,5 +1,5 @@
 import { createContext, createEffect, createSignal, useContext, type JSX } from "solid-js"
-import { deepMerge, type ConfigPatch, type CorvusConfig, type Engine, type SoulseekDownloads } from "@corvus/core"
+import { deepMerge, type ConfigPatch, type CorvusConfig, type Engine, type HttpDownloads, type SoulseekDownloads } from "@corvus/core"
 import { setFetchCookies, setFetchProxy } from "@corvus/providers"
 import { setThemeMode } from "../theme"
 
@@ -13,6 +13,7 @@ const ConfigContext = createContext<ConfigStore>()
 export function ConfigProvider(props: {
   engine: Engine
   slsk?: SoulseekDownloads
+  http?: HttpDownloads
   initial: CorvusConfig
   persist?: (patch: ConfigPatch) => void
   children: JSX.Element
@@ -26,6 +27,7 @@ export function ConfigProvider(props: {
     setConfig(next)
     if ("proxy" in patch) setFetchProxy(next.proxy)
     if ("cloudflare" in patch) setFetchCookies(next.cloudflare)
+    if ("ytdlp" in patch) props.http?.setConfig(next.ytdlp)
     if ("providers" in patch) {
       const slsk = next.providers["soulseek"]
       props.slsk?.setCredentials({ username: slsk?.username, password: slsk?.password, listenPort: slsk?.listenPort })

@@ -51,7 +51,7 @@ export function createMediaTools(options: MediaToolsOptions = {}): PrepareMediaT
   const env = options.env ?? process.env
   const which = options.which ?? ((name: string) => Bun.which(name, { PATH: env.PATH ?? env.Path ?? "" }))
   const install = options.install ?? ((tool, url, destination, status) => installTool(tool, url, destination, status, options.fetch ?? fetch))
-  let pending: Promise<MediaTools> | undefined
+  const pending = new Map<string, Promise<MediaTools>>()
 
   async function resolve(config?: YtDlpConfig): Promise<MediaTools> {
     const resolved = new Map<MediaTool, string>()
@@ -99,13 +99,16 @@ export function createMediaTools(options: MediaToolsOptions = {}): PrepareMediaT
   }
 
   return (config) => {
-    if (!pending) {
-      pending = resolve(config).finally(() => {
-        pending = undefined
-        options.onStatus?.(undefined)
+    const key = config?.path?.trim() ?? ""
+    let task = pending.get(key)
+    if (!task) {
+      task = resolve(config).finally(() => {
+        pending.delete(key)
+        if (pending.size === 0) options.onStatus?.(undefined)
       })
+      pending.set(key, task)
     }
-    return pending
+    return task
   }
 }
 

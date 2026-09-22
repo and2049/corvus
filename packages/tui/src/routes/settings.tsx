@@ -5,6 +5,8 @@ import { humanSizeBinary, parseHumanSize } from "@corvus/providers"
 import { useConfig } from "../context/config"
 import { useShell, type Hint } from "../context/shell"
 import { theme } from "../theme"
+import { MEDIA_PRESETS } from "@corvus/core"
+import { AUDIO_FORMATS, AUDIO_QUALITIES } from "../component/format-dialog"
 
 const NAV_HINTS: readonly Hint[] = [
   { key: "enter", label: "change" },
@@ -16,7 +18,7 @@ const EDIT_HINTS: readonly Hint[] = [
   { key: "esc", label: "cancel" },
 ]
 
-type RowKind = "toggle" | "text" | "int" | "size" | "nav"
+type RowKind = "toggle" | "text" | "int" | "size" | "nav" | "choice"
 
 interface Row {
   readonly key: string
@@ -29,6 +31,13 @@ interface Row {
 const SLSK_FIELDS: Readonly<Record<string, "username" | "password">> = {
   slskUsername: "username",
   slskPassword: "password",
+}
+
+const MEDIA_CHOICES: Readonly<Record<string, readonly { value: string; label: string }[]>> = {
+  preset: [...MEDIA_PRESETS.map((p) => ({ value: p.id, label: p.label })),
+    { value: "audio", label: "Audio format picker" }, { value: "formats", label: "Individual formats" }],
+  audioFormat: AUDIO_FORMATS.map((a) => ({ value: a.format, label: a.format })),
+  audioQuality: AUDIO_QUALITIES.map((q) => ({ value: q.value, label: q.label })),
 }
 
 const ROWS: readonly Row[] = [
@@ -45,6 +54,13 @@ const ROWS: readonly Row[] = [
   { key: "slskUsername", label: "soulseek username", kind: "text", note: "applies now · an unused username registers a new account" },
   { key: "slskPassword", label: "soulseek password", kind: "text", secret: true, note: "applies now · there is no password reset, keep it safe" },
   { key: "sources", label: "sources »", kind: "nav", note: "enable/disable search sources" },
+  { key: "media.preset", label: "media preset", kind: "choice", note: "enter cycles · initial media picker selection" },
+  { key: "media.preferMp4", label: "prefer MP4", kind: "toggle", note: "video presets prefer H.264 + AAC; fall back if unavailable" },
+  { key: "media.rememberLast", label: "remember media choice", kind: "toggle", note: "save preset/picker mode and audio options after adding a download" },
+  { key: "media.audioFormat", label: "audio format", kind: "choice", note: "enter cycles · default for the audio format picker" },
+  { key: "media.audioQuality", label: "audio quality", kind: "choice", note: "enter cycles · applies to lossy audio extraction" },
+  { key: "media.format", label: "custom media format", kind: "text", note: "yt-dlp -f expression · used by the Custom format preset · empty = best" },
+  { key: "media.path", label: "yt-dlp path", kind: "text", note: "applies to new probes/downloads · empty = PATH or managed installation" },
 ]
 
 export function Settings(props: { onBack: () => void; onOpenSources: () => void }) {
@@ -55,6 +71,16 @@ export function Settings(props: { onBack: () => void; onOpenSources: () => void 
   let scroll: ScrollBoxRenderable | undefined
 
   const current = createMemo(() => ROWS[cursor()]!)
+
+  const mediaValue = (field: string): string => {
+    const media = config().ytdlp
+    if (field === "preset") return media?.preset ?? (media?.format?.trim() ? "custom" : "best")
+    if (field === "audioFormat") return media?.audioFormat || "mp3"
+    if (field === "audioQuality") return media?.audioQuality ?? "0"
+    if (field === "preferMp4") return media?.preferMp4 ? "on" : "off"
+    if (field === "rememberLast") return media?.rememberLast === false ? "off" : "on"
+    return (field === "path" ? media?.path : media?.format) ?? ""
+  }
 
   // Keep the cursor row inside the scrollbox viewport.
   createEffect(() => {
@@ -71,6 +97,11 @@ export function Settings(props: { onBack: () => void; onOpenSources: () => void 
 
   const displayValue = (row: Row): string => {
     const c = config()
+    if (row.key.startsWith("media.")) {
+      const field = row.key.slice(6)
+      const value = mediaValue(field)
+      return MEDIA_CHOICES[field]?.find((choice) => choice.value === value)?.label ?? (value || "(automatic)")
+    }
     switch (row.key) {
       case "downloadDir":
         return c.downloadDir
@@ -113,6 +144,19 @@ export function Settings(props: { onBack: () => void; onOpenSources: () => void 
 
   const activate = () => {
     const row = current()
+    if (row.key.startsWith("media.")) {
+      const field = row.key.slice(6)
+      if (row.kind === "choice") {
+        const choices = MEDIA_CHOICES[field]!
+        const index = choices.findIndex((choice) => choice.value === mediaValue(field))
+        update({ ytdlp: { [field]: choices[(index + 1) % choices.length]!.value } })
+        return
+      }
+      if (row.kind === "toggle") {
+        update({ ytdlp: { [field]: mediaValue(field) !== "on" } })
+        return
+      }
+    }
     if (row.kind === "nav") {
       props.onOpenSources()
       return
@@ -131,7 +175,9 @@ export function Settings(props: { onBack: () => void; onOpenSources: () => void 
   const save = (raw: string) => {
     const row = current()
     const trimmed = raw.trim()
-    if (row.kind === "int") {
+    if (row.key.startsWith("media.")) {
+      update({ ytdlp: { [row.key.slice(6)]: trimmed } })
+    } else if (row.kind === "int") {
       const n = Number.parseInt(trimmed, 10)
       const valid = trimmed !== "" && Number.isFinite(n) && n >= 0
       update({ [row.key]: valid ? n : undefined })

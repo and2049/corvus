@@ -83,6 +83,22 @@ describe("media tool resolution", () => {
     await expect(createMediaTools({ platform: "freebsd", which: () => null })()).rejects.toThrow("install it on PATH")
   })
 
+  test("a changed executable override does not reuse an in-flight resolution for the old path", async () => {
+    const directory = await temporary()
+    let finish!: () => void
+    const installing = new Promise<void>((resolve) => { finish = resolve })
+    const prepare = createMediaTools({
+      directory, platform: "linux", arch: "x64",
+      which: (name) => name === "/custom/yt-dlp" ? name : name === "ffmpeg" || name === "ffprobe" ? `/system/${name}` : null,
+      install: () => installing,
+    })
+    const previous = prepare()
+    const current = await prepare({ path: "/custom/yt-dlp" })
+    expect(current.ytdlp).toBe("/custom/yt-dlp")
+    finish()
+    expect((await previous).ytdlp).toBe(path.join(directory, "yt-dlp"))
+  })
+
   test("Windows uses .exe cache names and preserves the Path environment key", async () => {
     const directory = await temporary()
     const destinations: string[] = []
