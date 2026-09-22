@@ -33,7 +33,7 @@ async function latest(): Promise<string> {
 // binary directly — the installer owns download/extract/replace, including the
 // Windows running-exe lock handling.
 async function runInstaller(method: Method, version: string): Promise<void> {
-  const dir = mkdtempSync(join(tmpdir(), "corvus-upgrade-"))
+  const dir = mkdtempSync(join(tmpdir(), "corvus-update-"))
   try {
     if (method === "powershell") {
       const installer = join(dir, "install.ps1")
@@ -73,7 +73,7 @@ function run(command: string, args: string[]): void {
   if (result.status !== 0) throw new Error(`${command} exited with code ${result.status ?? "unknown"}`)
 }
 
-export async function runUpgrade(args: string[]): Promise<void> {
+export async function runUpdate(args: string[]): Promise<void> {
   const versionIndex = args.findIndex((arg) => arg === "--version" || arg === "-v")
   const requested = versionIndex >= 0 ? args[versionIndex + 1] : undefined
   const to = requested ? requested.replace(/^v/, "") : await latest()
@@ -82,9 +82,9 @@ export async function runUpgrade(args: string[]): Promise<void> {
     return
   }
   const method: Method = process.platform === "win32" ? "powershell" : "curl"
-  process.stdout.write(`upgrading corvus ${CORVUS_VERSION} -> ${to} using ${method}\n`)
+  process.stdout.write(`updating corvus ${CORVUS_VERSION} -> ${to} using ${method}\n`)
   await runInstaller(method, to)
-  process.stdout.write(`upgraded corvus to ${to}\n`)
+  process.stdout.write(`updated corvus to ${to}\n`)
 }
 
 export function printHelp(): void {
@@ -92,8 +92,8 @@ export function printHelp(): void {
 
 Usage:
   corvus                     Launch the TUI
-  corvus upgrade             Upgrade to the latest release
-  corvus upgrade -v <ver>    Upgrade to a specific version
+  corvus update              Update to the latest release
+  corvus update -v <ver>     Update to a specific version
   corvus --version           Print the version
   corvus --help              Show this help
 

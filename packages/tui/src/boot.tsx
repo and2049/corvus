@@ -17,7 +17,7 @@ import {
 import { setFetchCookies, setFetchProxy } from "@corvus/providers"
 import { App } from "./app"
 
-// Launches the TUI. Kept out of main.tsx so the CLI subcommands (upgrade,
+// Launches the TUI. Kept out of main.tsx so the CLI subcommands (update,
 // --version, --help) don't pull in the engine and its native dependencies.
 export async function boot(): Promise<void> {
   const config = await loadConfig()

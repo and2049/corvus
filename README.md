@@ -21,8 +21,8 @@ This installs the `corvus` binary to `~/.corvus/bin` and adds it to your PATH. T
 Update to the latest release:
 
 ```bash
-corvus upgrade            # latest
-corvus upgrade -v 0.1.0   # a specific version
+  corvus update             # latest
+  corvus update -v 0.1.0    # a specific version
 ```
 
 Releases are published from git tags (`v*.*.*`). Running from source (`bun dev`) reports version `local`.

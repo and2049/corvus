@@ -39,6 +39,20 @@ const nativeAddonPlugin: BunPlugin = {
   },
 }
 
+// Bun's Linux standalone runtime cannot load utp-native's Node ABI addon.
+// WebTorrent imports its optional uTP loader eagerly, so setting `utp: false`
+// alone still produces a noisy missing-native-build warning. Replace that
+// loader in Linux bundles; TCP peer connections remain available.
+const linuxUtpPlugin: BunPlugin = {
+  name: "disable-linux-utp-native",
+  setup(build) {
+    build.onLoad(
+      { filter: /webtorrent[\\/]lib[\\/]utp\.cjs$/ },
+      () => ({ loader: "js", contents: "module.exports = {}" }),
+    )
+  },
+}
+
 const binary = "corvus"
 const outdir = path.join(dir, "dist")
 
@@ -78,10 +92,12 @@ for (const target of targets) {
   const asset = assetName(target)
   const executable = target.os === "windows" ? `${binary}.exe` : binary
   console.log(`building ${asset} (v${version}, channel ${channel})`)
+  const plugins = [solidPlugin, nativeAddonPlugin]
+  if (target.os === "linux") plugins.push(linuxUtpPlugin)
   const result = await Bun.build({
     entrypoints: ["./src/main.tsx"],
     tsconfig: "./tsconfig.json",
-    plugins: [solidPlugin, nativeAddonPlugin],
+    plugins,
     minify: true,
     sourcemap: channel === "local" || channel === "dev" ? "inline" : "none",
     compile: {

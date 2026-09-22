@@ -120,7 +120,7 @@ if (-not (Test-Path $extractedBinary)) {
 $destBinary = Join-Path $installDir "$App.exe"
 
 # Windows does not allow overwriting a running executable. If a previous
-# corvus.exe is locked (e.g. running `corvus upgrade`), rename it aside and
+# corvus.exe is locked (e.g. running `corvus update`), rename it aside and
 # drop the new binary into place. A detached cleanup process deletes the
 # leftover once the running corvus exits.
 $oldBinary = "$destBinary.old"

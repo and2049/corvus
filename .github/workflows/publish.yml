@@ -85,7 +85,7 @@ jobs:
           merge-multiple: true
       # Draft: reviewed and published by hand. The installers ship alongside the
       # binaries so releases/latest/download/install resolves for fresh installs
-      # and `corvus upgrade`.
+      # and `corvus update`.
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.version.outputs.tag }}
